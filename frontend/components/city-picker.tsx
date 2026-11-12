@@ -25,6 +25,12 @@ type CityPickerProps = {
   /** Shown when the input is focused and empty. */
   suggestions?: City[]
   disabled?: boolean
+  /** "card" renders a large field card (icon bubble, caption label, big text). */
+  variant?: "default" | "card"
+  /** Small hint shown under the input in the card variant. */
+  helper?: string
+  /** Marks the field as invalid. */
+  invalid?: boolean
   className?: string
 }
 
@@ -48,8 +54,12 @@ export function CityPicker({
   placeholder = "Country, city or airport",
   suggestions,
   disabled,
+  variant = "default",
+  helper,
+  invalid,
   className,
 }: CityPickerProps) {
+  const card = variant === "card"
   const id = React.useId()
   const listId = `${id}-list`
   const rootRef = React.useRef<HTMLDivElement>(null)
@@ -116,64 +126,108 @@ export function CityPicker({
 
   const showList = open && (results.length > 0 || loading || !!query.trim())
 
+  const input = (
+    <input
+      id={id}
+      role="combobox"
+      aria-expanded={showList}
+      aria-controls={listId}
+      aria-autocomplete="list"
+      aria-invalid={invalid || undefined}
+      aria-activedescendant={
+        showList && results[active] ? `${id}-${results[active].id}` : undefined
+      }
+      autoComplete="off"
+      disabled={disabled}
+      placeholder={placeholder}
+      // While focused/typing show the query; otherwise the selected city
+      value={open ? query : value ? format(value) : ""}
+      onFocus={() => {
+        setOpen(true)
+        setActive(0)
+      }}
+      onChange={(e) => {
+        setQuery(e.target.value)
+        setOpen(true)
+        setActive(0)
+      }}
+      onKeyDown={onKeyDown}
+      className={cn(
+        "min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground",
+        card ? "w-full truncate text-xl font-bold" : "text-sm"
+      )}
+    />
+  )
+
+  const clear = value && !disabled && (
+    <button
+      type="button"
+      aria-label="Clear"
+      onClick={() => {
+        onChange(null)
+        setQuery("")
+      }}
+      className="rounded p-1 text-muted-foreground hover:bg-muted"
+    >
+      <X className="size-4" />
+    </button>
+  )
+
   return (
     <div ref={rootRef} className={cn("relative w-full", className)}>
-      {label && (
-        <label
-          htmlFor={id}
-          className="mb-1 block text-xs font-medium text-muted-foreground"
+      {card ? (
+        <div
+          className={cn(
+            "flex min-h-[84px] items-center gap-3.5 rounded-[20px] border bg-card px-4 py-3 transition-colors",
+            "focus-within:border-teal/60",
+            invalid && "border-red-400",
+            disabled && "opacity-50"
+          )}
         >
-          {label}
-        </label>
-      )}
-      <div
-        className={cn(
-          "flex h-12 items-center gap-2 rounded-lg border bg-background px-3 transition-colors",
-          "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
-          disabled && "opacity-50"
-        )}
-      >
-        <MapPin className="size-4 shrink-0 text-muted-foreground" />
-        <input
-          id={id}
-          role="combobox"
-          aria-expanded={showList}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={
-            showList && results[active] ? `${id}-${results[active].id}` : undefined
-          }
-          autoComplete="off"
-          disabled={disabled}
-          placeholder={placeholder}
-          // While focused/typing show the query; otherwise the selected city
-          value={open ? query : value ? format(value) : ""}
-          onFocus={() => {
-            setOpen(true)
-            setActive(0)
-          }}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            setOpen(true)
-            setActive(0)
-          }}
-          onKeyDown={onKeyDown}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-        {value && !disabled && (
-          <button
-            type="button"
-            aria-label="Clear"
-            onClick={() => {
-              onChange(null)
-              setQuery("")
-            }}
-            className="rounded p-1 text-muted-foreground hover:bg-muted"
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-mint">
+            <MapPin className="size-5 text-teal" />
+          </span>
+          <div className="min-w-0 flex-1">
+            {label && (
+              <label
+                htmlFor={id}
+                className="block text-[11px] font-bold tracking-wider text-muted-foreground uppercase"
+              >
+                {label}
+              </label>
+            )}
+            <div className="flex items-center gap-1">
+              {input}
+              {clear}
+            </div>
+            {helper && (
+              <div className="text-xs text-muted-foreground">{helper}</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          {label && (
+            <label
+              htmlFor={id}
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              {label}
+            </label>
+          )}
+          <div
+            className={cn(
+              "flex h-12 items-center gap-2 rounded-lg border bg-background px-3 transition-colors",
+              "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
+              disabled && "opacity-50"
+            )}
           >
-            <X className="size-4" />
-          </button>
-        )}
-      </div>
+            <MapPin className="size-4 shrink-0 text-muted-foreground" />
+            {input}
+            {clear}
+          </div>
+        </>
+      )}
 
       {showList && (
         <ul
