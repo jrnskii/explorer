@@ -95,6 +95,7 @@ export type RoundTripSearchInput = {
 /** Supported transport modes. A search may allow more than one mode. */
 export type TransportType =
   | 'BUSSES'
+  | 'FERRIES'
   | 'PLANES'
   | 'TRAINS';
 
