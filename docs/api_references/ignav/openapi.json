@@ -1,0 +1,1668 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Ignav Public API",
+    "description": "Public fare search, cheapest-dates, booking-link, airport-search, and health-check contract.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Report API process availability and the running release identifier. No API key is required.",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponseModel" }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/airports": {
+      "get": {
+        "summary": "Search Airports",
+        "operationId": "search_airports_api_airports_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "title": "Q" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/AirportModel" },
+                  "title": "Response Search Airports Api Airports Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            },
+            "description": "Payment Required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/fares/search": {
+      "post": {
+        "summary": "Search Fares",
+        "description": "Search one or two ordered flight legs.",
+        "operationId": "search_fares_api_fares_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FareSearchRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FareSearchModel" }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment Required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "424": {
+            "description": "Failed Dependency",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fares/one-way": {
+      "post": {
+        "summary": "Search One Way",
+        "description": "Search one-way itineraries.",
+        "operationId": "search_one_way_api_fares_one_way_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OneWayRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FareSearchResponseModel"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment Required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "424": {
+            "description": "Failed Dependency",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fares/round-trip": {
+      "post": {
+        "summary": "Search Round Trip",
+        "description": "Search round-trip itineraries.",
+        "operationId": "search_round_trip_api_fares_round_trip_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RoundTripRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FareSearchResponseModel"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment Required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "424": {
+            "description": "Failed Dependency",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fares/booking-links": {
+      "post": {
+        "summary": "Get Booking Links",
+        "description": "Get booking links for a specific itinerary.",
+        "operationId": "get_booking_links_api_fares_booking_links_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BookingLinksRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/BookingOptionsResponseModel"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SearchBookingOptionsResponseModel"
+                    }
+                  ],
+                  "title": "Response Get Booking Links Api Fares Booking Links Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment Required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "424": {
+            "description": "Failed Dependency",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fares/cheapest-dates": {
+      "post": {
+        "summary": "Search Cheapest Dates",
+        "description": "Find the lowest fare for each departure date in a window.",
+        "operationId": "search_cheapest_dates_api_fares_cheapest_dates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CheapestDatesRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheapestDatesResponseModel"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment Required",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "424": {
+            "description": "Failed Dependency",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponseModel" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AirportModel": {
+        "properties": {
+          "code": { "type": "string", "title": "Code" },
+          "name": { "type": "string", "title": "Name" },
+          "city": { "type": "string", "title": "City" },
+          "country": { "type": "string", "title": "Country" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["code", "name", "city", "country"],
+        "title": "AirportModel"
+      },
+      "BaggageAllowanceModel": {
+        "properties": {
+          "carry_on": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Carry On"
+          },
+          "checked": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Checked"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BaggageAllowanceModel"
+      },
+      "BaggagePricingModel": {
+        "properties": {
+          "carry_on_bags": {
+            "type": "integer",
+            "title": "Carry On Bags",
+            "description": "Requested party total."
+          },
+          "checked_bags": {
+            "type": "integer",
+            "title": "Checked Bags",
+            "description": "Requested party total."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["estimated", "reported_included", "unknown"],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["carry_on_bags", "checked_bags", "status"],
+        "title": "BaggagePricingModel"
+      },
+      "BookingItineraryModel": {
+        "properties": {
+          "price": { "$ref": "#/components/schemas/PriceModel" },
+          "outbound": { "$ref": "#/components/schemas/LegModel" },
+          "inbound": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/LegModel" },
+              { "type": "null" }
+            ]
+          },
+          "cabin_class": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Cabin Class"
+          },
+          "bags": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggageAllowanceModel" },
+              { "type": "null" }
+            ]
+          },
+          "baggage_pricing": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggagePricingModel" },
+              { "type": "null" }
+            ]
+          },
+          "has_mixed_carriers": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Has Mixed Carriers",
+            "description": "True when a direction contains multiple reported marketing carriers. Missing carrier codes are ignored; this does not describe ticketing or connection protection."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["price", "outbound"],
+        "title": "BookingItineraryModel"
+      },
+      "BookingLinkModel": {
+        "properties": {
+          "provider_name": { "type": "string", "title": "Provider Name" },
+          "provider_type": {
+            "anyOf": [
+              { "type": "string", "enum": ["airline", "third_party"] },
+              { "type": "null" }
+            ],
+            "title": "Provider Type"
+          },
+          "specificity": {
+            "anyOf": [
+              { "type": "string", "enum": ["exact_flight", "search_results"] },
+              { "type": "null" }
+            ],
+            "title": "Specificity"
+          },
+          "fare_name": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Fare Name"
+          },
+          "price": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/PriceModel" },
+              { "type": "null" }
+            ]
+          },
+          "baggage_pricing": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggagePricingModel" },
+              { "type": "null" }
+            ]
+          },
+          "url": { "type": "string", "title": "Url" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["provider_name", "url"],
+        "title": "BookingLinkModel"
+      },
+      "BookingLinksRequest": {
+        "properties": {
+          "ignav_id": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Ignav Id"
+          },
+          "origin": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Origin"
+          },
+          "destination": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Destination"
+          },
+          "departure_date": {
+            "anyOf": [
+              { "type": "string", "format": "date" },
+              { "type": "null" }
+            ],
+            "title": "Departure Date"
+          },
+          "outbound_carrier_code": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Outbound Carrier Code"
+          },
+          "outbound_flight_number": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Outbound Flight Number"
+          },
+          "return_date": {
+            "anyOf": [
+              { "type": "string", "format": "date" },
+              { "type": "null" }
+            ],
+            "title": "Return Date"
+          },
+          "inbound_carrier_code": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Inbound Carrier Code"
+          },
+          "inbound_flight_number": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Inbound Flight Number"
+          },
+          "adults": {
+            "anyOf": [
+              { "type": "integer", "minimum": 1.0 },
+              { "type": "null" }
+            ],
+            "title": "Adults"
+          },
+          "children": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Children"
+          },
+          "infants_in_seat": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Infants In Seat"
+          },
+          "infants_on_lap": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Infants On Lap"
+          },
+          "market": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Market"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BookingLinksRequest"
+      },
+      "BookingOptionModel": {
+        "properties": {
+          "legs": {
+            "items": { "type": "string", "enum": ["outbound", "inbound"] },
+            "type": "array",
+            "title": "Legs"
+          },
+          "links": {
+            "items": { "$ref": "#/components/schemas/BookingLinkModel" },
+            "type": "array",
+            "title": "Links"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["legs", "links"],
+        "title": "BookingOptionModel"
+      },
+      "BookingOptionsResponseModel": {
+        "properties": {
+          "itinerary": { "$ref": "#/components/schemas/BookingItineraryModel" },
+          "booking_options": {
+            "items": { "$ref": "#/components/schemas/BookingOptionModel" },
+            "type": "array",
+            "title": "Booking Options"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["itinerary", "booking_options"],
+        "title": "BookingOptionsResponseModel"
+      },
+      "CheapestDateModel": {
+        "properties": {
+          "departure_date": { "type": "string", "title": "Departure Date" },
+          "return_date": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Return Date"
+          },
+          "price": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/PriceModel" },
+              { "type": "null" }
+            ],
+            "description": "Lowest qualifying whole-trip fare for the whole party; null when none was found."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["departure_date", "price"],
+        "title": "CheapestDateModel"
+      },
+      "CheapestDatesRequest": {
+        "properties": {
+          "origin": { "type": "string", "title": "Origin" },
+          "destination": { "type": "string", "title": "Destination" },
+          "departure_date_range": {
+            "$ref": "#/components/schemas/DepartureDateRange"
+          },
+          "stay_days": {
+            "anyOf": [
+              { "type": "integer", "maximum": 365.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Stay Days"
+          },
+          "adults": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Adults",
+            "default": 1
+          },
+          "children": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Children",
+            "default": 0
+          },
+          "infants_in_seat": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Infants In Seat",
+            "default": 0
+          },
+          "infants_on_lap": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Infants On Lap",
+            "default": 0
+          },
+          "cabin_class": {
+            "type": "string",
+            "enum": ["economy", "premium_economy", "business", "first"],
+            "title": "Cabin Class",
+            "default": "economy"
+          },
+          "max_stops": {
+            "anyOf": [
+              { "type": "integer", "maximum": 2.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Stops"
+          },
+          "carry_on_bags": {
+            "anyOf": [
+              { "type": "integer", "maximum": 9.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Carry On Bags",
+            "description": "Requested total carry-on bags for the party, up to one per traveler with a seat. Zero, null or omitted means no preference. Calendar returns date-level prices."
+          },
+          "checked_bags": {
+            "anyOf": [
+              { "type": "integer", "maximum": 9.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Checked Bags",
+            "description": "Requested total checked bags for the party, up to one per traveler with a seat. Zero, null or omitted means no preference."
+          },
+          "max_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Price"
+          },
+          "departure_time_range": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/TimeRangeInput" },
+              { "type": "null" }
+            ]
+          },
+          "return_time_range": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/TimeRangeInput" },
+              { "type": "null" }
+            ]
+          },
+          "market": { "type": "string", "title": "Market", "default": "US" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["origin", "destination", "departure_date_range"],
+        "title": "CheapestDatesRequest"
+      },
+      "CheapestDatesResponseModel": {
+        "properties": {
+          "origin": { "type": "string", "title": "Origin" },
+          "destination": { "type": "string", "title": "Destination" },
+          "dates": {
+            "items": { "$ref": "#/components/schemas/CheapestDateModel" },
+            "type": "array",
+            "title": "Dates"
+          },
+          "observed_at": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "title": "Observed At",
+            "description": "UTC time Ignav finished retrieving these prices; null when unknown. Not a guarantee of current fares."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["origin", "destination", "dates"],
+        "title": "CheapestDatesResponseModel"
+      },
+      "DepartureDateRange": {
+        "properties": {
+          "start": { "type": "string", "format": "date", "title": "Start" },
+          "end": { "type": "string", "format": "date", "title": "End" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["start", "end"],
+        "title": "DepartureDateRange"
+      },
+      "ErrorDetailModel": {
+        "properties": {
+          "type": { "type": "string", "title": "Type" },
+          "code": { "type": "string", "title": "Code" },
+          "message": { "type": "string", "title": "Message" },
+          "field": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Field"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["type", "code", "message"],
+        "title": "ErrorDetailModel"
+      },
+      "ErrorResponseModel": {
+        "properties": {
+          "error": { "$ref": "#/components/schemas/ErrorDetailModel" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["error"],
+        "title": "ErrorResponseModel"
+      },
+      "FareSearchModel": {
+        "properties": {
+          "legs": {
+            "items": { "$ref": "#/components/schemas/SearchLegModel" },
+            "type": "array",
+            "title": "Legs"
+          },
+          "itineraries": {
+            "items": { "$ref": "#/components/schemas/SearchItineraryModel" },
+            "type": "array",
+            "title": "Itineraries"
+          },
+          "observed_at": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "title": "Observed At",
+            "description": "UTC time Ignav finished retrieving this search result; null when unknown. Not a guarantee of the current fare."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["legs", "itineraries", "observed_at"],
+        "title": "FareSearchModel"
+      },
+      "FareSearchRequest": {
+        "properties": {
+          "legs": {
+            "items": { "$ref": "#/components/schemas/SearchLegInput" },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Legs"
+          },
+          "adults": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Adults",
+            "default": 1
+          },
+          "children": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Children",
+            "default": 0
+          },
+          "infants_in_seat": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Infants In Seat",
+            "default": 0
+          },
+          "infants_on_lap": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Infants On Lap",
+            "default": 0
+          },
+          "cabin_class": {
+            "type": "string",
+            "enum": ["economy", "premium_economy", "business", "first"],
+            "title": "Cabin Class",
+            "default": "economy"
+          },
+          "checked_bags": {
+            "anyOf": [
+              { "type": "integer", "maximum": 9.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Checked Bags",
+            "description": "Requested total checked bags for the party, up to one per traveler with a seat. Zero, null or omitted means no preference."
+          },
+          "carry_on_bags": {
+            "anyOf": [
+              { "type": "integer", "maximum": 9.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Carry On Bags",
+            "description": "Requested total carry-on bags for the party, up to one per traveler with a seat. Zero, null or omitted means no preference. Prices include estimated bag fees where available."
+          },
+          "max_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Price"
+          },
+          "airlines_include": {
+            "anyOf": [
+              { "items": { "type": "string" }, "type": "array" },
+              { "type": "null" }
+            ],
+            "title": "Airlines Include"
+          },
+          "airlines_exclude": {
+            "anyOf": [
+              { "items": { "type": "string" }, "type": "array" },
+              { "type": "null" }
+            ],
+            "title": "Airlines Exclude"
+          },
+          "allow_mixed_carriers": {
+            "type": "boolean",
+            "title": "Allow Mixed Carriers",
+            "description": "Allow multiple reported marketing carriers within a leg. This does not describe ticketing or connection protection.",
+            "default": true
+          },
+          "market": { "type": "string", "title": "Market", "default": "US" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["legs"],
+        "title": "FareSearchRequest"
+      },
+      "FareSearchResponseModel": {
+        "properties": {
+          "origin": { "type": "string", "title": "Origin" },
+          "destination": { "type": "string", "title": "Destination" },
+          "departure_date": { "type": "string", "title": "Departure Date" },
+          "return_date": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Return Date"
+          },
+          "itineraries": {
+            "items": { "$ref": "#/components/schemas/ItineraryModel" },
+            "type": "array",
+            "title": "Itineraries"
+          },
+          "observed_at": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "title": "Observed At",
+            "description": "UTC time Ignav finished retrieving this search result; null when unknown. Not a guarantee of the current fare."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "origin",
+          "destination",
+          "departure_date",
+          "itineraries",
+          "observed_at"
+        ],
+        "title": "FareSearchResponseModel"
+      },
+      "HealthResponseModel": {
+        "properties": {
+          "ok": { "type": "boolean", "const": true, "title": "Ok" },
+          "release": { "type": "string", "title": "Release" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["ok", "release"],
+        "title": "HealthResponseModel"
+      },
+      "ItineraryModel": {
+        "properties": {
+          "price": { "$ref": "#/components/schemas/PriceModel" },
+          "outbound": { "$ref": "#/components/schemas/LegModel" },
+          "inbound": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/LegModel" },
+              { "type": "null" }
+            ]
+          },
+          "cabin_class": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Cabin Class"
+          },
+          "bags": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggageAllowanceModel" },
+              { "type": "null" }
+            ]
+          },
+          "baggage_pricing": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggagePricingModel" },
+              { "type": "null" }
+            ]
+          },
+          "has_mixed_carriers": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Has Mixed Carriers",
+            "description": "True when a direction contains multiple reported marketing carriers. Missing carrier codes are ignored; this does not describe ticketing or connection protection."
+          },
+          "ignav_id": { "title": "Ignav Id", "type": "string" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["price", "outbound", "ignav_id"],
+        "title": "ItineraryModel"
+      },
+      "LegModel": {
+        "properties": {
+          "carrier": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Carrier"
+          },
+          "duration_minutes": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Duration Minutes"
+          },
+          "segments": {
+            "items": { "$ref": "#/components/schemas/SegmentModel" },
+            "type": "array",
+            "title": "Segments"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["segments"],
+        "title": "LegModel"
+      },
+      "OneWayRequest": {
+        "properties": {
+          "origin": { "type": "string", "title": "Origin" },
+          "destination": { "type": "string", "title": "Destination" },
+          "departure_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Departure Date"
+          },
+          "adults": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Adults",
+            "default": 1
+          },
+          "children": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Children",
+            "default": 0
+          },
+          "infants_in_seat": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Infants In Seat",
+            "default": 0
+          },
+          "infants_on_lap": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Infants On Lap",
+            "default": 0
+          },
+          "cabin_class": {
+            "type": "string",
+            "enum": ["economy", "premium_economy", "business", "first"],
+            "title": "Cabin Class",
+            "default": "economy"
+          },
+          "max_stops": {
+            "anyOf": [
+              { "type": "integer", "maximum": 2.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Stops"
+          },
+          "checked_bags": {
+            "anyOf": [
+              { "type": "integer", "maximum": 9.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Checked Bags",
+            "description": "Requested total checked bags for the party, up to one per traveler with a seat. Zero, null or omitted means no preference."
+          },
+          "carry_on_bags": {
+            "anyOf": [
+              { "type": "integer", "maximum": 9.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Carry On Bags",
+            "description": "Requested total carry-on bags for the party, up to one per traveler with a seat. Zero, null or omitted means no preference. Prices include estimated bag fees where available."
+          },
+          "max_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Price"
+          },
+          "departure_time_range": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/TimeRangeInput" },
+              { "type": "null" }
+            ]
+          },
+          "airlines_include": {
+            "anyOf": [
+              { "items": { "type": "string" }, "type": "array" },
+              { "type": "null" }
+            ],
+            "title": "Airlines Include"
+          },
+          "airlines_exclude": {
+            "anyOf": [
+              { "items": { "type": "string" }, "type": "array" },
+              { "type": "null" }
+            ],
+            "title": "Airlines Exclude"
+          },
+          "allow_mixed_carriers": {
+            "type": "boolean",
+            "title": "Allow Mixed Carriers",
+            "description": "Allow multiple reported marketing carriers within a direction. This does not describe ticketing or connection protection.",
+            "default": true
+          },
+          "market": { "type": "string", "title": "Market", "default": "US" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["origin", "destination", "departure_date"],
+        "title": "OneWayRequest"
+      },
+      "PriceModel": {
+        "properties": {
+          "amount": { "type": "number", "title": "Amount" },
+          "currency": { "type": "string", "title": "Currency" },
+          "status": {
+            "type": "string",
+            "enum": ["verified", "unverified"],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["amount", "currency", "status"],
+        "title": "PriceModel"
+      },
+      "RoundTripRequest": {
+        "properties": {
+          "origin": { "type": "string", "title": "Origin" },
+          "destination": { "type": "string", "title": "Destination" },
+          "departure_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Departure Date"
+          },
+          "adults": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Adults",
+            "default": 1
+          },
+          "children": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Children",
+            "default": 0
+          },
+          "infants_in_seat": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Infants In Seat",
+            "default": 0
+          },
+          "infants_on_lap": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Infants On Lap",
+            "default": 0
+          },
+          "cabin_class": {
+            "type": "string",
+            "enum": ["economy", "premium_economy", "business", "first"],
+            "title": "Cabin Class",
+            "default": "economy"
+          },
+          "max_stops": {
+            "anyOf": [
+              { "type": "integer", "maximum": 2.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Stops"
+          },
+          "checked_bags": {
+            "anyOf": [
+              { "type": "integer", "maximum": 9.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Checked Bags",
+            "description": "Requested total checked bags for the party, up to one per traveler with a seat. Zero, null or omitted means no preference."
+          },
+          "carry_on_bags": {
+            "anyOf": [
+              { "type": "integer", "maximum": 9.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Carry On Bags",
+            "description": "Requested total carry-on bags for the party, up to one per traveler with a seat. Zero, null or omitted means no preference. Prices include estimated bag fees where available."
+          },
+          "max_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Price"
+          },
+          "departure_time_range": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/TimeRangeInput" },
+              { "type": "null" }
+            ]
+          },
+          "airlines_include": {
+            "anyOf": [
+              { "items": { "type": "string" }, "type": "array" },
+              { "type": "null" }
+            ],
+            "title": "Airlines Include"
+          },
+          "airlines_exclude": {
+            "anyOf": [
+              { "items": { "type": "string" }, "type": "array" },
+              { "type": "null" }
+            ],
+            "title": "Airlines Exclude"
+          },
+          "allow_mixed_carriers": {
+            "type": "boolean",
+            "title": "Allow Mixed Carriers",
+            "description": "Allow multiple reported marketing carriers within a direction. This does not describe ticketing or connection protection.",
+            "default": true
+          },
+          "market": { "type": "string", "title": "Market", "default": "US" },
+          "return_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Return Date"
+          },
+          "return_time_range": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/TimeRangeInput" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["origin", "destination", "departure_date", "return_date"],
+        "title": "RoundTripRequest"
+      },
+      "SearchBookingItineraryModel": {
+        "properties": {
+          "price": { "$ref": "#/components/schemas/PriceModel" },
+          "legs": {
+            "items": { "$ref": "#/components/schemas/LegModel" },
+            "type": "array",
+            "title": "Legs"
+          },
+          "cabin_class": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Cabin Class"
+          },
+          "bags": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggageAllowanceModel" },
+              { "type": "null" }
+            ]
+          },
+          "baggage_pricing": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggagePricingModel" },
+              { "type": "null" }
+            ]
+          },
+          "has_mixed_carriers": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Has Mixed Carriers",
+            "description": "True when a leg contains multiple reported marketing carriers. Missing carrier codes are ignored; this does not describe ticketing or connection protection."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["price", "legs"],
+        "title": "SearchBookingItineraryModel"
+      },
+      "SearchBookingOptionModel": {
+        "properties": {
+          "leg_indexes": {
+            "items": { "type": "integer" },
+            "type": "array",
+            "title": "Leg Indexes"
+          },
+          "links": {
+            "items": { "$ref": "#/components/schemas/BookingLinkModel" },
+            "type": "array",
+            "title": "Links"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["leg_indexes", "links"],
+        "title": "SearchBookingOptionModel"
+      },
+      "SearchBookingOptionsResponseModel": {
+        "properties": {
+          "itinerary": {
+            "$ref": "#/components/schemas/SearchBookingItineraryModel"
+          },
+          "booking_options": {
+            "items": {
+              "$ref": "#/components/schemas/SearchBookingOptionModel"
+            },
+            "type": "array",
+            "title": "Booking Options"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["itinerary", "booking_options"],
+        "title": "SearchBookingOptionsResponseModel"
+      },
+      "SearchItineraryModel": {
+        "properties": {
+          "price": { "$ref": "#/components/schemas/PriceModel" },
+          "legs": {
+            "items": { "$ref": "#/components/schemas/LegModel" },
+            "type": "array",
+            "title": "Legs"
+          },
+          "cabin_class": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Cabin Class"
+          },
+          "bags": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggageAllowanceModel" },
+              { "type": "null" }
+            ]
+          },
+          "baggage_pricing": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/BaggagePricingModel" },
+              { "type": "null" }
+            ]
+          },
+          "has_mixed_carriers": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Has Mixed Carriers",
+            "description": "True when a leg contains multiple reported marketing carriers. Missing carrier codes are ignored; this does not describe ticketing or connection protection."
+          },
+          "ignav_id": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Ignav Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["price", "legs"],
+        "title": "SearchItineraryModel"
+      },
+      "SearchLegInput": {
+        "properties": {
+          "origin": { "type": "string", "title": "Origin" },
+          "destination": { "type": "string", "title": "Destination" },
+          "departure_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Departure Date"
+          },
+          "max_stops": {
+            "anyOf": [
+              { "type": "integer", "maximum": 2.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Stops"
+          },
+          "departure_time_range": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/TimeRangeInput" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["origin", "destination", "departure_date"],
+        "title": "SearchLegInput"
+      },
+      "SearchLegModel": {
+        "properties": {
+          "origin": { "type": "string", "title": "Origin" },
+          "destination": { "type": "string", "title": "Destination" },
+          "departure_date": { "type": "string", "title": "Departure Date" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["origin", "destination", "departure_date"],
+        "title": "SearchLegModel"
+      },
+      "SegmentModel": {
+        "properties": {
+          "marketing_carrier_code": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Marketing Carrier Code"
+          },
+          "flight_number": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Flight Number"
+          },
+          "operating_carrier_name": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Operating Carrier Name"
+          },
+          "departure_airport": {
+            "type": "string",
+            "title": "Departure Airport"
+          },
+          "departure_time_local": {
+            "type": "string",
+            "title": "Departure Time Local"
+          },
+          "departure_timezone": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Departure Timezone"
+          },
+          "departure_time_utc": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Departure Time Utc"
+          },
+          "arrival_airport": { "type": "string", "title": "Arrival Airport" },
+          "arrival_time_local": {
+            "type": "string",
+            "title": "Arrival Time Local"
+          },
+          "arrival_timezone": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Arrival Timezone"
+          },
+          "arrival_time_utc": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Arrival Time Utc"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "title": "Duration Minutes"
+          },
+          "aircraft": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Aircraft"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "marketing_carrier_code",
+          "flight_number",
+          "operating_carrier_name",
+          "departure_airport",
+          "departure_time_local",
+          "departure_timezone",
+          "departure_time_utc",
+          "arrival_airport",
+          "arrival_time_local",
+          "arrival_timezone",
+          "arrival_time_utc",
+          "duration_minutes",
+          "aircraft"
+        ],
+        "title": "SegmentModel"
+      },
+      "TimeRangeInput": {
+        "properties": {
+          "earliest_hour": {
+            "anyOf": [
+              { "type": "integer", "maximum": 23.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Earliest Hour"
+          },
+          "latest_hour": {
+            "anyOf": [
+              { "type": "integer", "maximum": 23.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Latest Hour"
+          },
+          "arrival_earliest_hour": {
+            "anyOf": [
+              { "type": "integer", "maximum": 23.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Arrival Earliest Hour"
+          },
+          "arrival_latest_hour": {
+            "anyOf": [
+              { "type": "integer", "maximum": 23.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Arrival Latest Hour"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TimeRangeInput",
+        "description": "Inclusive airport-local hour bounds; the full latest hour is included."
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": { "type": "apiKey", "in": "header", "name": "X-Api-Key" }
+    }
+  },
+  "servers": [{ "url": "https://ignav.com" }],
+  "security": [{ "ApiKeyAuth": [] }]
+}

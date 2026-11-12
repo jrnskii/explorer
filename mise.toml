@@ -1,7 +1,8 @@
 [tools]
 bun = "latest"
 codegraph = "latest"
-just = "latest"
+just = "1.59.0"
 lazygit = "latest"
 node = "latest"
+python = "3.14"
 uv = "latest"
