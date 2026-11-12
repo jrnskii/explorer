@@ -24,6 +24,11 @@
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
+  --color-teal: #129a88;
+  --color-forest: #005b49;
+  --color-deep: #064b40;
+  --color-mint: #e5f6f0;
+  --color-sel: #e8f7f1;
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
@@ -49,24 +54,24 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #f5faf8;
+  --foreground: #092c29;
+  --card: #ffffff;
+  --card-foreground: #092c29;
+  --popover: #ffffff;
+  --popover-foreground: #092c29;
+  --primary: #005b49;
+  --primary-foreground: #ffffff;
+  --secondary: #e5f6f0;
+  --secondary-foreground: #092c29;
+  --muted: #e5f6f0;
+  --muted-foreground: #647d7c;
+  --accent: #e5f6f0;
+  --accent-foreground: #092c29;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: #d9e5e3;
+  --input: #d9e5e3;
+  --ring: #129a88;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -127,4 +132,15 @@
   html {
     @apply font-sans;
   }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="checkbox"],
+  [role="option"] {
+    cursor: pointer;
+  }
+}
+
+.dots {
+  background-image: radial-gradient(#d3e6e1 1.2px, transparent 1.2px);
+  background-size: 26px 26px;
 }
