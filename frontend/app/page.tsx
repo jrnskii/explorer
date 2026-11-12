@@ -1,8 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
-import { CityPicker, type City } from "@/components/city-picker"
+import type { City } from "@/components/city-picker"
+import {
+  EMPTY_TRIP_INPUTS,
+  TripInputs,
+  type TripInputsValue,
+} from "@/components/trip-inputs"
+import {
+  TripOpportunities,
+  TripOpportunitiesPlaceholder,
+} from "@/components/trip-opportunities"
+import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 
 const CITIES: City[] = [
   { id: "lon", name: "London", country: "United Kingdom", code: "LON" },
@@ -19,13 +29,27 @@ const CITIES: City[] = [
 ]
 
 export default function Home() {
-  const [from, setFrom] = useState<City | null>(null)
-  const [to, setTo] = useState<City | null>(null)
+  const [trip, setTrip] = useState<TripInputsValue>(EMPTY_TRIP_INPUTS)
+  const [status, setStatus] = useState<"idle" | "loading" | "done">("idle")
+
+  // Mock search: resolves with sample data after a short delay.
+  useEffect(() => {
+    if (status !== "loading") return
+    const timer = setTimeout(() => setStatus("done"), 800)
+    return () => clearTimeout(timer)
+  }, [status])
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-8 sm:flex-row">
-      <CityPicker label="From" value={from} onChange={setFrom} cities={CITIES} />
-      <CityPicker label="To" value={to} onChange={setTo} cities={CITIES} />
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-8">
+      <TripInputs
+        value={trip}
+        onChange={setTrip}
+        cities={CITIES}
+        loading={status === "loading"}
+        onSubmit={() => setStatus("loading")}
+      />
+      {status === "loading" && <TripOpportunitiesPlaceholder />}
+      {status === "done" && <TripOpportunities options={SAMPLE_OPTIONS} />}
     </main>
   )
 }
