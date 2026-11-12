@@ -1,0 +1,152 @@
+"""
+Round Trip Search API, version 1.
+
+All trips start and end in departure_city. Every mandatory city must be
+visited, and excluded cities must not appear anywhere in the itinerary.
+Invalid inputs produce GraphQL errors; a valid search with no matches
+returns an empty list.
+"""
+schema {
+    query: Query
+}
+
+type Query {
+    """
+    Find round-trip itineraries satisfying the supplied constraints.
+    Results are ordered by total price, lowest first, then total travel time.
+    """
+    round_trip_options(input: RoundTripSearchInput!): [RoundTripOption!]!
+}
+
+"""
+An RFC 3339 timestamp with an explicit UTC offset, such as 2026-12-01T09:00:00Z.
+"""
+scalar DateTime
+
+"""
+An exact, non-negative decimal encoded as a JSON string, such as \"149.95\".
+"""
+scalar Decimal
+
+"""
+Supported transport modes. A search may allow more than one mode.
+"""
+enum TransportType {
+    TRAINS
+    PLANES
+    BUSSES
+}
+
+input RoundTripSearchInput {
+    """
+    Maximum absolute deviation, in minutes, of the final return arrival from
+    desired_arrival_date. Must be non-negative; zero requires an exact match.
+    This tolerance does not permit departure before departure_date.
+    """
+    time_tolerance: Int!
+
+    """
+    Maximum total itinerary price, inclusive of taxes and mandatory fees.
+    This is an absolute budget, not a percentage or an amount above a baseline.
+    """
+    expenses_tolerance: MoneyInput!
+
+    """
+    Non-empty canonical city identifier; also the final destination.
+    """
+    departure_city: String!
+
+    """
+    Distinct canonical city identifiers that must each be visited at least once.
+    Their order does not constrain the itinerary. Must not contain departure_city.
+    """
+    mandatory_cities: [String!]! = []
+
+    """
+    Distinct canonical city identifiers that must not occur as leg endpoints,
+    including connections. Must not overlap mandatory_cities or departure_city.
+    """
+    excluded_cities: [String!]! = []
+
+    """
+    Non-empty list of distinct allowed transport modes.
+    """
+    transport_types: [TransportType!]!
+
+    """
+    Earliest permitted departure timestamp from departure_city.
+    Despite the field name, this is a timestamp, not a calendar date.
+    """
+    departure_date: DateTime!
+
+    """
+    Target return arrival timestamp at departure_city, strictly after departure_date.
+    Despite the field name, this is a timestamp, not a calendar date.
+    """
+    desired_arrival_date: DateTime!
+}
+
+input MoneyInput {
+    """
+    Non-negative amount expressed in major currency units.
+    """
+    amount: Decimal!
+
+    """
+    Uppercase ISO 4217 currency code, such as USD or EUR.
+    """
+    currency: String!
+}
+
+type Money {
+    """
+    Non-negative amount expressed in major currency units.
+    """
+    amount: Decimal!
+
+    """
+    Uppercase ISO 4217 currency code, matching the search budget currency.
+    """
+    currency: String!
+}
+
+type RoundTripOption {
+    """
+    Total price for one adult, including taxes and mandatory fees.
+    """
+    total_price: Money!
+
+    """
+    Non-empty list of legs in chronological order. The first leg starts and
+    the last leg ends in departure_city. Each leg starts where the previous
+    leg ended, no earlier than its arrival time. All legs use allowed modes.
+    """
+    path: [TripLeg!]!
+}
+
+type TripLeg {
+    """
+    Canonical departure city identifier.
+    """
+    from: String!
+
+    """
+    Canonical arrival city identifier.
+    """
+    to: String!
+
+    departure_at: DateTime!
+
+    """
+    Arrival timestamp, strictly after departure_at.
+    """
+    arrival_at: DateTime!
+
+    """
+    Travel duration in whole seconds, equal to arrival_at minus departure_at.
+    Does not include waiting time before or after this leg.
+    """
+    time_in_travel: Int!
+
+    transport_type: TransportType!
+}
