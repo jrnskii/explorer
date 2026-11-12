@@ -1,0 +1,6 @@
+[tools]
+bun = "latest"
+codegraph = "latest"
+lazygit = "latest"
+node = "latest"
+uv = "latest"
