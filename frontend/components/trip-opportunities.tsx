@@ -1,4 +1,4 @@
-import { ArrowRight, Bus, Plane, TrainFront, type LucideIcon } from "lucide-react"
+import { ArrowRight, Bus, Plane, Ship, TrainFront, type LucideIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -20,6 +20,7 @@ const MODE: Record<TransportType, { label: string; Icon: LucideIcon }> = {
   TRAINS: { label: "Train", Icon: TrainFront },
   PLANES: { label: "Plane", Icon: Plane },
   BUSSES: { label: "Bus", Icon: Bus },
+  FERRIES: { label: "Ferry", Icon: Ship },
 }
 
 const MONTHS = [
