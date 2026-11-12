@@ -1,0 +1,8 @@
+{
+  "DateTime": {
+    "py_type": "datetime.datetime"
+  },
+  "Decimal": {
+    "py_type": "decimal.Decimal"
+  }
+}
