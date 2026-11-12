@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Explorer — Find your next trip</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','system-ui','sans-serif']},colors:{bg:'#F5FAF8',ink:'#092C29',teal:'#129A88',forest:'#005B49',deep:'#064B40',mint:'#E5F6F0',sel:'#E8F7F1',soft:'#E4F4EE',mute:'#647D7C',line:'#D9E5E3'}}}}
+</script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:#F5FAF8;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:#F5FAF8;z-index:50}
+.dots{background-image:radial-gradient(#d3e6e1 1.2px,transparent 1.2px);background-size:26px 26px}
+.adv{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s ease}
+.adv.open{grid-template-rows:1fr}
+.adv>div{min-height:0;overflow:hidden}
+.adv.ov>div{overflow:visible}
+:focus-visible{outline:3px solid #129A88;outline-offset:2px}
+input[type=number]::-webkit-inner-spin-button{display:none}
+</style>
+</head>
+<body class="font-sans text-ink">
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<script>
+const {useState,useEffect,useRef}=React, h=htm.bind(React.createElement);
+const LOGO="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4NjcgMTg3IiB3aWR0aD0iODY3IiBoZWlnaHQ9IjE4NyIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJFeHBsb3JlciBsb2dvIj4KPHRpdGxlPkV4cGxvcmVyPC90aXRsZT4KPHBhdGggZmlsbD0iIzAwMCIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNIDg2NS4yNSA0Ni4wMCBMIDg2MC43NSA0NC43NSAgTCA4NTEuNzUgNDQuNTAgIEwgODQ0LjUwIDQ2LjAwICBMIDgzOS4wMCA0OC43NSAgTCA4MzQuNTAgNTIuMjUgIEwgODMwLjUwIDU2LjUwICBMIDgyNi43NSA2Mi4yNSAgTCA4MjEuNTAgNzMuMjUgIEwgODIwLjUwIDcyLjAwICBMIDgxNy4yNSA0OS4wMCAgTCA4MTYuMjUgNDcuNzUgIEwgNzg0LjUwIDQ3LjUwICBMIDc4My4wMCA0OC4yNSAgTCA3ODkuMDAgODIuNzUgIEwgNzg5LjAwIDE1Mi4yNSAgTCA3ODkuNTAgMTUzLjAwICBMIDgyMS41MCAxNTMuMjUgIEwgODIyLjI1IDE1Mi43NSAgTCA4MjIuNzUgMTAyLjUwICBMIDgyNS4yNSA5MS43NSAgTCA4MjguNTAgODYuMDAgIEwgODMzLjAwIDgxLjI1ICBMIDgzNi41MCA3OS4wMCAgTCA4NDAuNzUgNzcuMjUgIEwgODQ3LjAwIDc2LjAwICBMIDg1My41MCA3Ni4wMCAgTCA4NjMuNzUgNzcuNTAgIEwgODY1Ljc1IDc3LjI1ICBMIDg2NS43NSA0Ni41MCBaIE0gNjg3LjUwIDUyLjUwIEwgNjgwLjUwIDU3LjUwICBMIDY3MS43NSA2Ny4wMCAgTCA2NjguMjUgNzIuNTAgIEwgNjY1Ljc1IDc3Ljc1ICBMIDY2Mi41MCA4OS4yNSAgTCA2NjEuNzUgMTAyLjI1ICBMIDY2Mi4wMCAxMDcuMDAgIEwgNjYzLjc1IDExNi4yNSAgTCA2NjguNTAgMTI4LjAwICBMIDY3NC41MCAxMzYuNTAgIEwgNjgzLjc1IDE0NS4wMCAgTCA2OTMuNzUgMTUwLjc1ICBMIDcwNi4wMCAxNTQuNzUgIEwgNzE4LjUwIDE1Ni4yNSAgTCA3MzIuMjUgMTU1Ljc1ICBMIDc0Ny4yNSAxNTIuNzUgIEwgNzU3LjAwIDE0OS4wMCAgTCA3NjkuMjUgMTQyLjAwICBMIDc3MC41MCAxNDAuMDAgIEwgNzcwLjUwIDExOC43NSAgTCA3NjkuNzUgMTE3Ljc1ICBMIDc1OC43NSAxMjMuMjUgIEwgNzQ3Ljc1IDEyNi43NSAgTCA3MzYuMDAgMTI4LjUwICBMIDcyNi4wMCAxMjguNTAgIEwgNzE1LjUwIDEyNi41MCAgTCA3MDguNTAgMTIzLjI1ICBMIDcwMi41MCAxMTguMjUgIEwgNjk5LjAwIDExMy4wMCAgTCA2OTkuNTAgMTExLjI1ICBMIDc3Mi4yNSAxMTEuMDAgIEwgNzczLjAwIDExMC4wMCAgTCA3NzIuNzUgMTAyLjAwICBMIDc3MS43NSA5My43NSAgTCA3NzAuMDAgODUuNzUgIEwgNzY1LjUwIDczLjc1ICBMIDc2Mi43NSA2OC41MCAgTCA3NTguMDAgNjEuNzUgIEwgNzUyLjAwIDU1Ljc1ICBMIDc0NC4wMCA1MC4yNSAgTCA3MzMuMjUgNDYuMDAgIEwgNzI4LjAwIDQ1LjAwICBMIDcxNC4yNSA0NC41MCAgTCA3MDYuNTAgNDUuNTAgIEwgNjk3Ljc1IDQ3Ljc1IFogTSA2OTcuMjUgODYuNzUgTCA3MDAuMjUgODAuNzUgIEwgNzAzLjUwIDc3LjAwICBMIDcwNy4wMCA3NC4yNSAgTCA3MTAuNTAgNzIuNTAgIEwgNzE1LjAwIDcxLjI1ICBMIDcyMi43NSA3MS4wMCAgTCA3MjkuMjUgNzIuNzUgIEwgNzM0LjI1IDc2LjAwICBMIDczOS4wMCA4MS43NSAgTCA3NDEuMjUgODcuNzUgIEwgNzQwLjUwIDg4LjUwICBMIDY5OC4wMCA4OC41MCAgTCA2OTcuMjUgODcuNzUgWiBNIDY1Ni41MCA0Ni4wMCBMIDY0OC41MCA0NC41MCAgTCA2NDIuMjUgNDQuNTAgIEwgNjM2LjUwIDQ1LjUwICBMIDYzMC41MCA0OC4wMCAgTCA2MjQuNzUgNTIuMjUgIEwgNjE5LjUwIDU4LjI1ICBMIDYxNy4yNSA2MS43NSAgTCA2MTIuNzUgNzIuMjUgIEwgNjExLjc1IDczLjUwICBMIDYxMS4wMCA3My4wMCAgTCA2MDcuMDAgNDguMDAgIEwgNjA1LjUwIDQ3LjUwICBMIDU3My41MCA0Ny43NSAgTCA1NzMuMjUgNTAuMjUgIEwgNTc5LjAwIDgxLjUwICBMIDU3OS4wMCAxNTIuMDAgIEwgNTc5LjUwIDE1My4wMCAgTCA2MTIuMDAgMTUzLjI1ICBMIDYxMi43NSAxNTIuNTAgIEwgNjEyLjc1IDEwNy4yNSAgTCA2MTMuNTAgOTkuMDAgIEwgNjE1LjI1IDkyLjUwICBMIDYxOS41MCA4NS4wMCAgTCA2MjQuMjUgODAuNTAgIEwgNjMwLjI1IDc3LjUwICBMIDYzNy4wMCA3Ni4wMCAgTCA2NDMuNTAgNzYuMDAgIEwgNjU1LjI1IDc3Ljc1ICBMIDY1Ni43NSA3Ny4yNSAgTCA2NTcuMDAgNDYuNzUgWiBNIDQ3Ni41MCA0OS4wMCBMIDQ2OC41MCA1My4wMCAgTCA0NjMuMjUgNTYuNTAgIEwgNDU1LjUwIDYzLjc1ICBMIDQ0OS43NSA3MS43NSAgTCA0NDYuNzUgNzcuNzUgIEwgNDQ0LjUwIDg0LjUwICBMIDQ0Mi41MCA5OC4yNSAgTCA0NDMuMjUgMTEwLjI1ICBMIDQ0NC43NSAxMTcuMjUgIEwgNDQ2Ljc1IDEyMy4wMCAgTCA0NTEuNTAgMTMyLjAwICBMIDQ1OS41MCAxNDEuMjUgIEwgNDY3LjAwIDE0Ny4wMCAgTCA0NzguNTAgMTUyLjUwICBMIDQ4OS41MCAxNTUuMjUgIEwgNTAwLjI1IDE1Ni4yNSAgTCA1MTUuMDAgMTU1LjUwICBMIDUyNy41MCAxNTIuNTAgIEwgNTM4LjI1IDE0Ny41MCAgTCA1NDcuMDAgMTQxLjAwICBMIDU1NC4wMCAxMzMuMDAgIEwgNTU5LjI1IDEyMy43NSAgTCA1NjIuMjUgMTE0LjI1ICBMIDU2My41MCAxMDYuNTAgIEwgNTYzLjUwIDk0LjI1ICBMIDU2My4wMCA5MC41MCAgTCA1NjAuMjUgNzkuNzUgIEwgNTU2LjI1IDcxLjI1ICBMIDU1MS41MCA2NC41MCAgTCA1NDMuMDAgNTYuNTAgIEwgNTM3LjI1IDUyLjc1ICBMIDUyNS4yNSA0Ny41MCAgTCA1MTMuNzUgNDUuMDAgIEwgNDk3LjUwIDQ0LjUwICBMIDQ4Ni43NSA0Ni4wMCBaIE0gNDk0LjI1IDczLjUwIEwgNTAwLjAwIDcyLjUwICBMIDUwNi4yNSA3Mi41MCAgTCA1MTMuNTAgNzQuMDAgIEwgNTIwLjI1IDc3Ljc1ICBMIDUyNC41MCA4Mi4yNSAgTCA1MjcuNTAgODcuNzUgIEwgNTI5LjUwIDk2LjUwICBMIDUyOS41MCAxMDQuNTAgIEwgNTI3LjUwIDExMy4wMCAgTCA1MjMuMjUgMTIwLjI1ICBMIDUxOS4wMCAxMjQuMDAgIEwgNTEzLjc1IDEyNi43NSAgTCA1MDcuMDAgMTI4LjI1ICBMIDQ5OS4wMCAxMjguMjUgIEwgNDkyLjUwIDEyNi43NSAgTCA0ODUuNzUgMTIzLjAwICBMIDQ4MS41MCAxMTguNTAgIEwgNDc4LjUwIDExMi43NSAgTCA0NzYuNTAgMTAzLjAwICBMIDQ3Ny4wMCA5My43NSAgTCA0NzguNTAgODguMDAgIEwgNDgxLjI1IDgyLjc1ICBMIDQ4NS4yNSA3OC4yNSAgTCA0ODkuMjUgNzUuNTAgWiBNIDM1OS4wMCA1Mi41MCBMIDM1MC43NSA0Ny43NSAgTCAzNDIuNTAgNDUuMjUgIEwgMzM2LjI1IDQ0LjUwICBMIDMyNS4wMCA0NS4wMCAgTCAzMTcuNTAgNDcuMDAgIEwgMzExLjc1IDQ5Ljc1ICBMIDMwNi4wMCA1My41MCAgTCAyOTkuNTAgNTkuNTAgIEwgMjk0LjAwIDY2LjAwICBMIDI5My4yNSA2NS4wMCAgTCAyOTMuMDAgNDguMDAgIEwgMjkyLjAwIDQ3LjUwICBMIDI2MC43NSA0Ny41MCAgTCAyNTkuNzUgNDguMjUgIEwgMjU5LjUwIDE4Mi41MCAgTCAyNjAuMDAgMTgzLjUwICBMIDI5Mi41MCAxODMuNzUgIEwgMjkzLjI1IDE4My4yNSAgTCAyOTMuMjUgMTM1LjUwICBMIDI5NC4wMCAxMzQuNTAgIEwgMzAxLjc1IDE0My41MCAgTCAzMTAuNzUgMTUwLjUwICBMIDMxOC41MCAxNTQuMDAgIEwgMzI3Ljc1IDE1Ni4wMCAgTCAzMzguNTAgMTU2LjAwICBMIDM0NS41MCAxNTQuNzUgIEwgMzUwLjAwIDE1My4yNSAgTCAzNTguNzUgMTQ4LjUwICBMIDM2Ny4wMCAxNDAuNzUgIEwgMzcxLjUwIDEzNC4yNSAgTCAzNzQuNTAgMTI4LjI1ICBMIDM3Ny4wMCAxMjEuMjUgIEwgMzc5LjUwIDEwNy41MCAgTCAzNzkuNTAgOTMuMjUgIEwgMzc4LjI1IDg0LjUwICBMIDM3Ni43NSA3OC43NSAgTCAzNzIuMDAgNjcuNTAgIEwgMzY2Ljc1IDU5Ljc1IFogTSAzMjAuMjUgNzMuMjUgTCAzMjUuNTAgNzMuMjUgIEwgMzI5LjAwIDc0LjAwICBMIDMzMy4wMCA3NS43NSAgTCAzMzcuMDAgNzguNTAgIEwgMzM5LjI1IDgwLjc1ICBMIDM0Mi41MCA4NS43NSAgTCAzNDQuNzUgOTEuNTAgIEwgMzQ1LjUwIDk1LjUwICBMIDM0NS43NSAxMDEuMjUgIEwgMzQ1LjAwIDEwOC4yNSAgTCAzNDEuNTAgMTE3LjAwICBMIDMzNi43NSAxMjIuNTAgIEwgMzMzLjI1IDEyNS4wMCAgTCAzMjkuMDAgMTI2Ljc1ICBMIDMyNS4wMCAxMjcuNTAgIEwgMzIwLjc1IDEyNy41MCAgTCAzMTQuNTAgMTI2LjI1ICBMIDMwNi41MCAxMjIuMDAgIEwgMzAxLjc1IDExNy43NSAgTCAyOTYuMDAgMTEwLjAwICBMIDI5Mi4wMCAxMDAuNzUgIEwgMjkzLjUwIDk2LjAwICBMIDI5Ni4yNSA5MC41MCAgTCAzMDAuMjUgODQuNzUgIEwgMzA0Ljc1IDgwLjI1ICBMIDMxMy4yNSA3NS4wMCBaIE0gOC4yNSAxNC43NSBMIDguMDAgMTYuNzUgIEwgMTYuNTAgNzguMDAgIEwgMTcuMDAgODYuMDAgIEwgOS4wMCAxNDIuNTAgIEwgOC4wMCAxNTIuNzUgIEwgOC41MCAxNTMuMjUgIEwgMTIyLjUwIDE1My4wMCAgTCAxMjMuMDAgMTUyLjAwICBMIDEyMy4wMCAxMjMuNTAgIEwgMTIyLjI1IDEyMi41MCAgTCA0NS41MCAxMjIuMjUgIEwgNDQuNTAgMTIxLjI1ICBMIDQ3LjUwIDk5LjUwICBMIDQ4Ljc1IDk3Ljc1ICBMIDExNi4yNSA5Ny43NSAgTCAxMTcuMjUgOTcuMjUgIEwgMTE3LjI1IDcwLjUwICBMIDExNi4yNSA3MC4wMCAgTCA0OC43NSA3MC4wMCAgTCA0Ny41MCA2OC4yNSAgTCA0NC41MCA0Ni41MCAgTCA0NS41MCA0NS41MCAgTCAxMjEuNTAgNDUuMjUgIEwgMTIyLjAwIDQ0LjUwICBMIDEyMi4wMCAxNS4wMCAgTCAxMjEuMjUgMTQuNTAgWiBNIDM5NS4yNSAxMC43NSBMIDM5NC4yNSAxMS43NSAgTCAzOTQuNTAgMTUyLjUwICBMIDM5NS4yNSAxNTMuMjUgIEwgNDI3LjUwIDE1My4yNSAgTCA0MjguMjUgMTUyLjUwICBMIDQyOC4yNSAxMi4wMCAgTCA0MjcuMjUgMTAuNzUgWiIvPgo8cGF0aCBmaWxsPSIjMzQ1QzQ5IiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0gMTUxLjc1IDQ4LjUwIEwgMTQyLjAwIDU4Ljc1ICBMIDE0MS4wMCA2MS41MCAgTCAxNDEuMDAgNjUuMDAgIEwgMTQxLjc1IDY2Ljc1ICBMIDE3My4wMCA5NS4wMCAgTCAxNzkuMjUgMTAxLjUwICBMIDE3MS43NSAxMDcuNTAgIEwgMTY5Ljc1IDEwNy41MCAgTCAxNDYuMDAgMTAxLjc1ICBMIDE0Mi4yNSAxMDEuNzUgIEwgMTM5LjUwIDEwMy43NSAgTCAxMzQuNzUgMTA5Ljc1ICBMIDEzNC41MCAxMTQuMDAgIEwgMTM1LjUwIDExNi4yNSAgTCAxMzcuNzUgMTE3Ljc1ICBMIDE2Ny41MCAxMjcuNTAgIEwgMTY4LjUwIDEyOS43NSAgTCAxNzUuNTAgMTYwLjAwICBMIDE3Ny43NSAxNjIuNzUgIEwgMTgxLjI1IDE2My4yNSAgTCAxODMuMDAgMTYyLjUwICBMIDE4Ny41MCAxNTguMDAgIEwgMTg5Ljc1IDE1NC43NSAgTCAxOTAuMDAgMTI4LjUwICBMIDE5My43NSAxMjIuNzUgIEwgMTk1LjUwIDEyMS4wMCAgTCAxOTcuMDAgMTIxLjUwICBMIDIyMi43NSAxNTcuMjUgIEwgMjI2LjI1IDE1OS43NSAgTCAyMjguMjUgMTU5Ljc1ICBMIDIyOS43NSAxNTkuMDAgIEwgMjQyLjAwIDE0Ni4yNSAgTCAyNDQuMjUgMTQzLjI1ICBMIDI0NC43NSAxNDEuMDAgIEwgMjQzLjc1IDEzOC4wMCAgTCAyMjEuMjUgMTAyLjAwICBMIDIyMC4wMCA5OS4wMCAgTCAyMzIuMjUgODMuNzUgIEwgMjM4LjAwIDc1LjI1ICBMIDI0MS4wMCA2OS4wMCAgTCAyNDMuNTAgNjAuMDAgIEwgMjQzLjUwIDU3LjUwICBMIDI0Mi41MCA1NS41MCAgTCAyNDAuMjUgNTQuMDAgIEwgMjM0LjUwIDUzLjUwICBMIDIyNC41MCA1Ni4yNSAgTCAyMTMuNTAgNjIuMDAgIEwgMjA0Ljc1IDY4LjI1ICBMIDE5Ny4wMCA3NS4yNSAgTCAxOTUuMjUgNzUuNzUgIEwgMTU4LjI1IDQ4Ljc1ICBMIDE1Ni4wMCA0Ny43NSBaIi8+Cjwvc3ZnPg==";
+/* ---------- design tokens / data ---------- */
+const CARD="rounded-[20px] border border-line bg-white";
+const LBL="text-[11px] font-bold uppercase tracking-wider text-mute";
+const CITIES=["London","Paris","Amsterdam","Berlin","Prague","Vienna","Budapest","Rome","Milan","Barcelona","Madrid","Lisbon","Porto","Brussels","Copenhagen","Stockholm","Warsaw","Krakow","Vilnius","Riga","Tallinn","Munich","Zurich","Dublin","Edinburgh","Athens","Split","Ljubljana","Bratislava","Seville"];
+const LENGTHS=["1–3 days","4–6 days","5–8 days","7–10 days","10–14 days"];
+const NUM=["Any number","1 city","2 cities","3 cities","4 cities","5+ cities"],NIGHTS=["1 night","2–4 nights","4–6 nights","Flexible"];
+const SUG=[250,500,750,1000,1500];
+const MODES=[["flight","Flight","plane"],["train","Train","train"],["bus","Bus","bus"]];
+const P={
+pin:'<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>',
+cal:'<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+users:'<circle cx="9" cy="9" r="3"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5M16 6.5a3 3 0 0 1 0 5.5M17.5 14.3c2 .6 3.2 2.3 3.2 4.7"/>',
+chev:'<path d="m6 9 6 6 6-6"/>',check:'<path d="m5 12.5 4.5 4.5L19 7"/>',
+plane:'<path d="M12 3c1 0 1.6 1 1.6 2.5V9l7.4 4.5v2l-7.4-2v4l2 1.5V21l-3.6-1-3.6 1v-1.5l2-1.5v-4l-7.4 2v-2L10.4 9V5.5C10.4 4 11 3 12 3z"/>',
+train:'<rect x="5.5" y="3.5" width="13" height="14" rx="3"/><path d="M5.5 11h13M9 14.5h.01M15 14.5h.01M8 21l2-3.5M16 21l-2-3.5"/>',
+bus:'<rect x="5" y="3.5" width="14" height="14" rx="2.5"/><path d="M5 11h14M8.5 14.5h.01M15.5 14.5h.01M7.5 17.5V20M16.5 17.5V20"/>',
+sliders:'<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h14"/>',x:'<path d="M6 6l12 12M18 6 6 18"/>',arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>'};
+const Icon=({n,c="h-5 w-5 stroke-teal"})=>h`<svg viewBox="0 0 24 24" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className=${c+" shrink-0"} dangerouslySetInnerHTML=${{__html:P[n]}}/>`;
+const Tick=({s="h-6 w-6"})=>h`<span className=${"grid place-items-center rounded-full bg-forest shrink-0 "+s}><${Icon} n="check" c="h-3.5 w-3.5 stroke-white [stroke-width:3]"/></span>`;
+const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+const fmtD=d=>d?new Date(d+"T00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"}):"Pick a date";
+const addDays=(d,n)=>{const x=new Date(d+"T00:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)};
+const diff=(a,b)=>Math.round((Date.parse(a+"T00:00:00Z")-Date.parse(b+"T00:00:00Z"))/864e5);
+const tripLen=s=>s.ret?diff(s.ret,s.date)+" days":s.len==="custom"?s.custom+" days":s.len;
+const eur=n=>"€"+Number(n).toLocaleString("en-GB");
+function useOpen(){const[o,set]=useState(false),r=useRef();
+ useEffect(()=>{const c=e=>{if(r.current&&!r.current.contains(e.target))set(false)},k=e=>e.key==="Escape"&&set(false);
+  document.addEventListener("mousedown",c);document.addEventListener("keydown",k);return()=>{document.removeEventListener("mousedown",c);document.removeEventListener("keydown",k)}},[]);return[o,set,r]}
+const arrowNav=e=>{const b=[...e.currentTarget.querySelectorAll('[role=option]')],i=b.indexOf(document.activeElement);
+ if(e.key==="ArrowDown"){e.preventDefault();b[(i+1)%b.length]?.focus()}if(e.key==="ArrowUp"){e.preventDefault();b[(i<=0?b.length:i)-1]?.focus()}};
+const Menu=({children,cls=""})=>h`<div role="listbox" onKeyDown=${arrowNav} className=${"absolute left-0 right-0 top-[calc(100%+6px)] z-40 rounded-2xl border border-line bg-white p-1.5 shadow-[0_10px_30px_rgba(6,75,64,.12)] "+cls}>${children}</div>`;
+const Opt=({sel,children,...p})=>h`<button type="button" role="option" aria-selected=${!!sel} className=${"block w-full rounded-xl px-3.5 py-2.5 text-left text-[15px] font-semibold hover:bg-mint focus:bg-mint "+(sel?"text-teal":"text-ink")} ...${p}>${children}</button>`;
+
+/* ---------- ExplorerLogo / Header ---------- */
+const ExplorerLogo=()=>h`<div><img src=${LOGO} alt="Explorer" className="h-9 w-auto sm:h-11"/><p className="mt-1 text-[15px] font-bold text-forest sm:text-base">Find your next trip</p></div>`;
+const Header=({view,go})=>{const nl="flex items-center rounded-full px-1 py-2.5 text-[15px] font-semibold leading-none hover:text-teal ";
+ return h`<header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-5">
+ <button onClick=${()=>go("search")} aria-label="Explorer home" className="text-left"><${ExplorerLogo}/></button>
+ <nav aria-label="Main" className="flex flex-wrap items-center gap-x-6 gap-y-2 sm:gap-x-8">
+  <button className=${nl+(view==="search"||view==="results"?"text-teal":"")} onClick=${()=>go("search")}>Explore</button>
+  <button className=${nl+(view==="about"?"text-teal":"")} onClick=${()=>go("about")}>About us</button>
+  <div className="relative flex items-center justify-center"><span aria-disabled="true" className="flex cursor-default items-center px-1 py-2.5 text-[15px] font-semibold leading-none text-ink/80">Community</span><span className="absolute left-1/2 top-full -translate-x-1/2 whitespace-nowrap text-[11px] leading-none text-mute">Work in progress</span></div>
+  <button onClick=${()=>go("trips")} className=${"flex items-center rounded-full bg-mint px-5 py-2.5 text-[15px] font-semibold leading-none hover:bg-soft "+(view==="trips"?"ring-2 ring-teal/40":"")}>My trips</button>
+ </nav></header>`};
+
+/* ---------- field shells ---------- */
+const FieldCard=({icon,label,helper,children,chev,err})=>h`<div className=${CARD+" relative flex min-h-[84px] items-center gap-3.5 px-4 py-3 transition-colors focus-within:border-teal/60 "+(err?"!border-red-400":"")}>
+ <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-mint"><${Icon} n=${icon}/></span>
+ <div className="min-w-0 flex-1"><div className=${LBL}>${label}</div>${children}${helper&&h`<div className="text-xs text-mute">${helper}</div>`}</div>${chev&&h`<${Icon} n="chev" c="h-4 w-4 stroke-ink"/>`}</div>`;
+
+const CityInput=({value,onChange,multi,chips=[],onChips,placeholder,label,other=[]})=>{
+ const[q,setQ]=useState(multi?"":value),[o,setO,r]=useOpen(),[act,setAct]=useState(-1);
+ useEffect(()=>{if(!multi)setQ(value)},[value]);
+ const sug=CITIES.filter(c=>c.toLowerCase().includes(q.trim().toLowerCase())&&!chips.includes(c)&&!other.includes(c)&&c!==(multi?"":value)).slice(0,6);
+ const pick=c=>{if(multi){onChips([...chips,c]);setQ("")}else{onChange(c);setQ(c)}setO(false);setAct(-1)};
+ const key=e=>{if(e.key==="ArrowDown"){e.preventDefault();setO(true);setAct(a=>Math.min(a+1,sug.length-1))}
+  else if(e.key==="ArrowUp"){e.preventDefault();setAct(a=>Math.max(a-1,0))}
+  else if(e.key==="Enter"){if(multi||o){e.preventDefault();const c=sug[act]||(q.trim()&&(CITIES.find(x=>x.toLowerCase()===q.trim().toLowerCase())||q.trim()));if(c)pick(c)}}
+  else if(e.key==="Backspace"&&multi&&!q&&chips.length)onChips(chips.slice(0,-1))};
+ const inp=h`<input aria-label=${label} aria-autocomplete="list" autoComplete="off" value=${q} placeholder=${placeholder}
+  onChange=${e=>{setQ(e.target.value);setO(true);setAct(-1);if(!multi)onChange(e.target.value)}} onFocus=${()=>setO(true)} onKeyDown=${key}
+  className=${multi?"min-w-[8ch] flex-1 bg-transparent py-1 text-[15px] font-medium outline-none placeholder:text-mute/70":"w-full bg-transparent text-xl font-bold outline-none"}/>`;
+ const list=o&&sug.length>0&&h`<${Menu}>${sug.map((c,i)=>h`<${Opt} key=${c} sel=${i===act} onMouseDown=${e=>{e.preventDefault();pick(c)}}>${c}<//>`)}<//>`;
+ return multi?h`<div ref=${r} className="relative"><div className="flex min-h-[48px] flex-wrap items-center gap-2 rounded-xl border border-line bg-white px-3 py-1.5 focus-within:border-teal/60">
+  ${chips.map(c=>h`<span key=${c} className="inline-flex items-center gap-1 rounded-full bg-mint py-1 pl-3 pr-1.5 text-sm font-semibold">${c}<button type="button" aria-label=${"Remove "+c} onClick=${()=>onChips(chips.filter(x=>x!==c))} className="grid h-5 w-5 place-items-center rounded-full hover:bg-white"><${Icon} n="x" c="h-3 w-3 stroke-ink"/></button></span>`)}${inp}</div>${list}</div>`
+  :h`<div ref=${r} className="relative">${inp}${list}</div>`;
+};
+
+const Select=({icon,label,value,options,onChange,compact})=>{const[o,setO,r]=useOpen();
+ const btn=h`<button type="button" aria-haspopup="listbox" aria-expanded=${o} aria-label=${label+": "+value} onClick=${()=>setO(!o)} className="flex w-full items-center justify-between text-left"><span className=${compact?"text-[15px] font-semibold":"text-xl font-bold"}>${value}</span><${Icon} n="chev" c=${"h-4 w-4 stroke-ink transition-transform "+(o?"rotate-180":"")}/></button>`;
+ const menu=o&&h`<${Menu}>${options.map(x=>h`<${Opt} key=${x} sel=${x===value} onClick=${()=>{onChange(x);setO(false)}}>${x}<//>`)}<//>`;
+ return compact?h`<div ref=${r} className="relative"><div className="mb-1.5 text-sm font-semibold">${label}</div><div className=${CARD+" !rounded-xl px-4 py-3 focus-within:border-teal/60"}>${btn}</div>${menu}</div>`
+ :h`<div ref=${r} className="relative"><${FieldCard} icon=${icon} label=${label}>${btn}<//>${menu}</div>`};
+
+/* ---------- main fields ---------- */
+const LocationInput=({s,set,err})=>h`<${FieldCard} icon="pin" label="Round trip from" helper="Leave and return to the same place." err=${err}><${CityInput} label="Round trip from" value=${s.from} onChange=${v=>set({from:v})} placeholder="City"/><//>`;
+const DatePicker=({s,set,min,err})=>{const ref=useRef();
+ return h`<div className="relative"><${FieldCard} icon="cal" label="When" err=${err}><div className="flex items-center justify-between"><span className="text-xl font-bold">${fmtD(s.date)}</span><${Icon} n="cal" c="h-[18px] w-[18px] stroke-ink"/></div><//>
+ <input ref=${ref} type="date" aria-label="Travel date" min=${min} value=${s.date} onChange=${e=>set({date:e.target.value})} onClick=${e=>e.target.showPicker&&e.target.showPicker()} className="absolute inset-0 h-full w-full cursor-pointer opacity-0"/></div>`};
+const TripDurationSelector=({s,set})=>{const[cus,setCus]=useState(s.len==="custom");
+ if(s.ret)return h`<${FieldCard} icon="clock" label="Trip length"><div className="text-xl font-bold">${diff(s.ret,s.date)} days</div><button type="button" onClick=${()=>{setCus(false);set({ret:"",len:s.len==="custom"?"5–8 days":s.len})}} className="text-xs font-semibold text-teal">Set by return date · use a range</button><//>`;
+ if(cus)return h`<${FieldCard} icon="clock" label="Trip length"><div className="flex items-center gap-2"><input type="number" min="1" max="60" aria-label="Custom days" autoFocus value=${s.custom} onChange=${e=>set({custom:e.target.value.replace(/\D/g,"")})} className="w-14 bg-transparent text-xl font-bold outline-none"/><span className="font-bold">days</span><button type="button" onClick=${()=>{setCus(false);set({len:"5–8 days"})}} className="ml-auto text-xs font-semibold text-teal">Use range</button></div><//>`;
+ return h`<${Select} icon="clock" label="Trip length" value=${s.len} options=${[...LENGTHS,"Custom…"]} onChange=${v=>v==="Custom…"?(setCus(true),set({len:"custom",custom:"6"})):set({len:v})}/>`};
+const TravellerSelector=({s,set})=>{const[o,setO,r]=useOpen(),n=s.trav,b="grid h-9 w-9 place-items-center rounded-full border border-line hover:bg-mint disabled:opacity-40";
+ return h`<div ref=${r} className="relative"><${FieldCard} icon="users" label="Travellers"><button type="button" aria-haspopup="dialog" aria-expanded=${o} onClick=${()=>setO(!o)} className="flex w-full items-center justify-between text-left"><span className="text-xl font-bold">${n} ${n===1?"person":"people"}</span><${Icon} n="chev" c=${"h-4 w-4 stroke-ink transition-transform "+(o?"rotate-180":"")}/></button><//>
+ ${o&&h`<div role="dialog" aria-label="Number of travellers" className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 flex items-center justify-between rounded-2xl border border-line bg-white p-3 shadow-[0_10px_30px_rgba(6,75,64,.12)]"><span className="text-sm font-semibold">Travellers</span><div className="flex items-center gap-3"><button type="button" className=${b} aria-label="Fewer travellers" disabled=${n<=1} onClick=${()=>set({trav:n-1})}><${Icon} n="minus" c="h-4 w-4 stroke-ink"/></button><span aria-live="polite" className="w-5 text-center font-bold">${n}</span><button type="button" className=${b} aria-label="More travellers" disabled=${n>=12} onClick=${()=>set({trav:n+1})}><${Icon} n="plus" c="h-4 w-4 stroke-ink"/></button></div></div>`}</div>`};
+
+/* ---------- budget ---------- */
+const BudgetSelector=({s,set,err})=>{const[o,setO,r]=useOpen(),[hl,setHl]=useState(-1);
+ const type=v=>set({budget:v.replace(/\D/g,"").replace(/^0+/,"").slice(0,7)}), pick=n=>{set({budget:String(n)});setO(false)};
+ const key=e=>{if([".",",","-","+","e"].includes(e.key))e.preventDefault();
+  if(e.key==="ArrowDown"){e.preventDefault();setO(true);setHl(i=>(i+1)%SUG.length)}if(e.key==="ArrowUp"){e.preventDefault();setHl(i=>(i<=0?SUG.length:i)-1)}
+  if(e.key==="Enter"&&o&&hl>=0){e.preventDefault();pick(SUG[hl])}};
+ const seg=(v,t,sub)=>{const on=s.scope===v;return h`<button type="button" role="radio" aria-checked=${on} onClick=${()=>set({scope:v})} className=${"flex min-h-[56px] flex-1 items-center justify-between gap-2 rounded-xl border px-4 text-left font-semibold transition-colors "+(on?"border-teal/70 bg-sel":"border-transparent bg-[#EEF1F1] hover:border-line")}><span>${t}</span>${on&&h`<${Tick}/>`}</button>`};
+ return h`<section aria-labelledby="bh" className=${CARD+" p-5 sm:p-6"}>
+ <h2 id="bh" className="text-[15px] font-extrabold uppercase tracking-wide text-teal">Your budget</h2>
+ <div role="radiogroup" aria-label="Budget covers" className="mt-4 flex flex-col gap-2.5 sm:flex-row">${seg("transport","Transport only")}${seg("whole","Whole trip")}</div>
+ <p className="mt-3 text-[13px] text-gray-500">${s.scope==="transport"?"Your budget covers transportation costs only.":"Work in progress"}</p>
+ <div className="mt-5"><label htmlFor="bud" className="mb-2 block text-sm font-semibold">Maximum budget</label>
+ <div ref=${r} className="relative max-w-[380px]"><div className=${"flex h-[60px] items-center gap-3 rounded-2xl border bg-white px-5 focus-within:ring-4 focus-within:ring-mint "+(err?"border-red-400":"border-teal/60")}>
+  <span className="text-lg font-bold">€</span>
+  <input id="bud" role="combobox" aria-expanded=${o} aria-controls="bl" inputMode="numeric" autoComplete="off" value=${s.budget} placeholder="Amount" onChange=${e=>{type(e.target.value);setHl(-1)}} onFocus=${()=>setO(true)} onKeyDown=${key} onPaste=${e=>{e.preventDefault();type(e.clipboardData.getData("text"))}} className="min-w-0 flex-1 bg-transparent text-[22px] font-bold outline-none"/>
+  <button type="button" tabIndex="-1" aria-label="Show suggested amounts" onClick=${()=>setO(!o)} className="p-1"><${Icon} n="chev" c=${"h-[18px] w-[18px] stroke-ink transition-transform "+(o?"rotate-180":"")}/></button></div>
+  ${o&&h`<div id="bl" role="listbox" className="absolute left-1 right-3 top-[calc(100%+4px)] z-40 rounded-2xl border border-line bg-white p-2 shadow-[0_10px_30px_rgba(6,75,64,.12)]">${SUG.map((n,i)=>h`<button type="button" role="option" key=${n} aria-selected=${String(n)===s.budget} onMouseDown=${e=>e.preventDefault()} onClick=${()=>pick(n)} className=${"block w-full rounded-xl px-8 py-2.5 text-left text-lg font-semibold hover:bg-mint "+(i===hl?"bg-mint ":"")+(String(n)===s.budget?"text-teal":"")}>${eur(n)}</button>`)}</div>`}
+ </div>${err&&h`<p role="alert" className="mt-1.5 text-[13px] text-red-700">Enter a whole number above 0.</p>`}</div></section>`};
+
+const TransportSelector=({s,set,err})=>h`<section aria-labelledby="th" className=${CARD+" p-5 sm:p-6"}>
+ <h2 id="th" className="text-[15px] font-extrabold uppercase tracking-wide text-teal">How would you like to travel?</h2>
+ <p className="mt-1.5 text-sm text-mute">Choose one or more transport options.</p>
+ <div role="group" aria-label="Transport" className="mt-4 grid grid-cols-3 gap-2.5 sm:gap-3">${MODES.map(([k,t,ic])=>{const on=s.modes.includes(k);
+  return h`<button key=${k} type="button" role="checkbox" aria-checked=${on} onClick=${()=>set({modes:on?s.modes.filter(m=>m!==k):[...s.modes,k]})} className=${"relative flex min-h-[112px] flex-col items-center justify-center gap-2.5 rounded-2xl border font-bold transition-colors "+(on?"border-teal/70 bg-sel":"border-line bg-white hover:border-teal/40")}>${on&&h`<span className="absolute right-2 top-2"><${Tick} s="h-[22px] w-[22px]"/></span>`}<${Icon} n=${ic} c="h-8 w-8 stroke-forest"/>${t}</button>`})}</div>
+ ${err&&h`<p role="alert" className="mt-2 text-[13px] text-red-700">Choose at least one way to travel.</p>`}</section>`;
+
+const ReturnDate=({s,set})=>h`<div><div className="mb-1.5 text-sm font-semibold">Return date <span className="font-medium text-mute">(optional)</span></div>
+ <div className=${CARD+" relative !rounded-xl px-4 py-3 focus-within:border-teal/60"}><div className="flex items-center gap-3"><${Icon} n="cal" c="h-[18px] w-[18px] stroke-ink"/><span className=${"flex-1 text-[15px] "+(s.ret?"font-semibold":"font-medium text-mute/70")}>${s.ret?fmtD(s.ret):"Select a date"}</span></div>
+ <input type="date" aria-label="Return date (optional)" min=${s.date?addDays(s.date,1):""} value=${s.ret} onChange=${e=>set({ret:e.target.value})} onClick=${e=>e.target.showPicker&&e.target.showPicker()} className="absolute inset-0 h-full w-full cursor-pointer rounded-xl opacity-0"/>
+ ${s.ret&&h`<button type="button" aria-label="Clear return date" onClick=${()=>set({ret:""})} className="absolute right-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-white hover:bg-mint"><${Icon} n="x" c="h-3.5 w-3.5 stroke-ink"/></button>`}</div></div>`;
+/* ---------- advanced ---------- */
+const AdvancedSearch=({s,set})=>{const[open,setOpen]=useState(false),[ov,setOv]=useState(false),[tip,setTip]=useState(false);
+ useEffect(()=>{setOv(false);if(open){const t=setTimeout(()=>setOv(true),320);return()=>clearTimeout(t)}},[open]);
+ return h`<section className=${CARD}>
+ <button type="button" aria-expanded=${open} aria-controls="adv" onClick=${()=>setOpen(!open)} className="flex w-full items-center gap-3 rounded-[20px] px-5 py-4 text-left sm:px-6"><${Icon} n="sliders"/><span className="flex-1 text-[17px] font-bold">Advanced search</span><${Icon} n="chev" c=${"h-5 w-5 stroke-ink transition-transform duration-300 "+(open?"rotate-180":"")}/></button>
+ <div id="adv" className=${"adv "+(open?"open ":"")+(ov?"ov":"")}><div><div className="grid gap-5 px-5 pb-6 pt-1 sm:px-6 md:grid-cols-2 lg:grid-cols-3">
+  <${Select} compact label="Number of cities" value=${s.cities} options=${NUM} onChange=${v=>set({cities:v})}/>
+  <${ReturnDate} s=${s} set=${set}/>
+  <${Select} compact label="Time per city" value=${s.nights} options=${NIGHTS} onChange=${v=>set({nights:v})}/>
+  <div><div className="mb-1.5 text-sm font-semibold">Must-visit cities</div><${CityInput} multi label="Must-visit cities" chips=${s.must} other=${s.avoid} onChips=${v=>set({must:v})} placeholder=${s.must.length?"":"e.g. Prague, Vienna"}/></div>
+  <div><div className="mb-1.5 text-sm font-semibold">Avoid cities</div><${CityInput} multi label="Avoid cities" chips=${s.avoid} other=${s.must} onChips=${v=>set({avoid:v})} placeholder=${s.avoid.length?"":"e.g. Paris"}/></div>
+  <div className="relative flex items-end pb-3"><label className="flex cursor-pointer items-center gap-3 text-[15px] font-semibold"><input type="checkbox" checked=${s.flex} onChange=${e=>set({flex:e.target.checked})} className="h-5 w-5 accent-[#005B49]"/>I'm flexible with travel dates</label>
+   <button type="button" aria-label="Why flexible dates?" aria-expanded=${tip} onClick=${()=>setTip(!tip)} className="ml-2"><${Icon} n="info" c="h-[18px] w-[18px] stroke-mute"/></button>
+   ${tip&&h`<div role="note" className="absolute bottom-full left-0 z-40 mb-1 w-64 rounded-xl border border-line bg-white p-3 text-xs text-mute shadow-lg">Flexible dates help Explorer discover potentially cheaper routes.</div>`}</div>
+ </div></div></div></section>`};
+
+/* ---------- search form + results ---------- */
+const DEFAULT={from:"London",date:"2026-12-12",len:"5–8 days",custom:"6",trav:2,scope:"whole",budget:"550",modes:["flight","train"],cities:"Any number",ret:"",nights:"Flexible",must:[],avoid:[],flex:false};
+const TripSearchForm=({s,set:setRaw,onSearch})=>{const[er,setEr]=useState({}),[note,setNote]=useState(""),today=new Date().toISOString().slice(0,10);
+ const set=p=>{setNote("");
+  if("date" in p&&s.ret){
+   if(!p.date||p.date>=s.ret){setRaw({...p,ret:""});setNote("Return date cleared: it must be after your departure date. Pick a new one or use a trip-length range.");return}
+   setRaw(p);setNote("Trip length updated to "+diff(s.ret,p.date)+" days to match your return date.");return}
+  if(p.ret){setRaw(p);setNote("Trip length set to "+diff(p.ret,s.date)+" days from your dates.");return}
+  if("ret" in p&&s.ret)setNote("Return date removed. Choose a trip-length range.");
+  setRaw(p)};
+ const submit=e=>{e.preventDefault();const x={};
+  if(!s.from.trim())x.from=1;if(!s.date||s.date<today)x.date=1;if(!/^[1-9]\d*$/.test(s.budget))x.budget=1;if(!s.modes.length)x.modes=1;if(s.ret&&s.ret<=s.date)x.ret=1;
+  setEr(x);if(!Object.keys(x).length)onSearch()};
+ return h`<form onSubmit=${submit} noValidate className="space-y-4 pb-16" aria-label="Trip search">
+ <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.25fr_1fr_1fr_.9fr]">
+  <${LocationInput} s=${s} set=${set} err=${er.from}/><${DatePicker} s=${s} set=${set} min=${today} err=${er.date}/><${TripDurationSelector} s=${s} set=${set}/><${TravellerSelector} s=${s} set=${set}/></div>
+ ${(er.from||er.date||er.ret)&&h`<p role="alert" className="text-[13px] text-red-700">${er.from?"Enter where you’re leaving from.":er.date?"Choose a travel date in the future.":"Return date must be after your departure date."}</p>`}
+ ${note&&h`<p role="status" className="text-[13px] font-semibold text-teal">${note}</p>`}
+ <div className="grid gap-4 lg:grid-cols-2"><${BudgetSelector} s=${s} set=${set} err=${er.budget}/><${TransportSelector} s=${s} set=${set} err=${er.modes}/></div>
+ <${AdvancedSearch} s=${s} set=${set}/>
+ <button type="submit" className="flex h-16 w-full items-center justify-center gap-3 rounded-[18px] bg-forest text-xl font-bold text-white transition hover:bg-deep hover:shadow-lg">Find my trip <${Icon} n="arrow" c="h-5 w-5 stroke-white"/></button></form>`};
+
+const POOL=["Amsterdam","Berlin","Prague","Vienna","Budapest","Brussels","Copenhagen","Krakow","Munich","Zurich","Lisbon","Porto","Rome","Milan","Barcelona","Paris"];
+function mock(s){const n=s.cities==="Any number"?0:parseInt(s.cities)||3;
+ return[0,1,2].map(i=>{const c=s.cities==="Any number"?2+i:n,base=POOL.filter(x=>x!==s.from&&!s.avoid.includes(x)&&!s.must.includes(x));
+  const mid=[...s.must,...base.slice(i*3,i*3+9)].slice(0,Math.max(c,s.must.length));
+  return{id:`demo-${i}-${s.from}`,title:["Classic loop","Off the beaten track","Longer circuit"][i],route:[s.from,...mid,s.from]}})}
+const TripResults=({s,back,saved,toggle})=>h`<div className="pb-16"><div role="note" className="rounded-2xl border border-teal/40 bg-sel px-5 py-3 text-sm font-semibold">Demonstration results — mock data only. No live prices, availability or booking links.</div>
+ <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><h1 className="text-3xl font-extrabold">Round trips from ${s.from}</h1><button onClick=${back} className="rounded-full bg-mint px-5 py-2.5 font-semibold hover:bg-soft">Edit search</button></div>
+ <p className="mt-1 text-mute">${fmtD(s.date)} · ${tripLen(s)}${s.ret?" (back "+fmtD(s.ret)+")":""} · ${s.trav} ${s.trav===1?"traveller":"travellers"} · up to ${eur(s.budget)} (${s.scope==="whole"?"whole trip":"transport only"}) · ${s.modes.join(", ")}</p>
+ <div className="mt-5 grid gap-4 md:grid-cols-3">${mock(s).map(t=>{const on=saved.some(x=>x.id===t.id);return h`<article key=${t.id} className=${CARD+" p-5"}><span className="rounded-full bg-mint px-2.5 py-1 text-[11px] font-bold text-forest">Example route</span><h2 className="mt-3 text-lg font-bold">${t.title}</h2><p className="mt-2 text-[15px] leading-relaxed text-mute">${t.route.join(" → ")}</p><p className="mt-3 text-xs text-mute">Starts and ends in ${s.from}. Cost estimate arrives with live data.</p><button onClick=${()=>toggle(t,s)} aria-pressed=${on} className=${"mt-4 w-full rounded-xl border py-2.5 font-semibold "+(on?"border-teal/70 bg-sel":"border-line hover:bg-mint")}>${on?"Saved ✓":"Save demo trip"}</button></article>`})}</div></div>`;
+const Page=({title,children})=>h`<div className=${CARD+" mb-16 max-w-2xl p-7"}><h1 className="text-3xl font-extrabold">${title}</h1><div className="mt-3 space-y-3 text-mute">${children}</div></div>`;
+
+function App(){
+ const[s,setS]=useState(()=>({...DEFAULT,...load("explorer.prefs",{})})),[view,setView]=useState("search"),[saved,setSaved]=useState(()=>load("explorer.trips",[]));
+ const set=p=>setS(o=>{const n={...o,...p};save("explorer.prefs",n);return n});
+ const go=v=>{setView(v);scrollTo(0,0)};
+ const toggle=(t,sr)=>setSaved(o=>{const n=o.some(x=>x.id===t.id)?o.filter(x=>x.id!==t.id):[...o,{...t,from:sr.from}];save("explorer.trips",n);return n});
+ return h`<div className="relative min-h-screen overflow-hidden"><div className="dots pointer-events-none absolute inset-x-0 top-0 h-[420px] opacity-60 [mask-image:linear-gradient(#000,transparent)]"/>
+ <div className="pointer-events-none absolute -left-40 top-52 h-[380px] w-[380px] rounded-full bg-soft"/><div className="pointer-events-none absolute -right-48 -top-10 h-[460px] w-[460px] rounded-full bg-[#DCEEF3]/70"/>
+ <div className="relative mx-auto max-w-[1180px] px-4 sm:px-6"><${Header} view=${view} go=${go}/>
+ ${view==="search"&&h`<div className="mt-4"><${TripSearchForm} s=${s} set=${set} onSearch=${()=>go("results")}/></div>`}
+ ${view==="results"&&h`<${TripResults} s=${s} back=${()=>go("search")} saved=${saved} toggle=${toggle}/>`}
+ ${view==="about"&&h`<${Page} title="About us"><p>Explorer helps students and budget-conscious travellers discover affordable multi-city round trips.</p><p>Explorer doesn’t sell tickets: journeys link out to external booking providers. This page is a placeholder.</p><//>`}
+ ${view==="trips"&&h`<${Page} title="My trips">${saved.length?saved.map(t=>h`<div key=${t.id} className="rounded-xl bg-bg p-3"><b className="text-ink">${t.title}</b><br/>${t.route.join(" → ")}<br/><span className="text-xs">Demo trip</span></div>`):h`<p>No saved trips yet. Save a demo trip from the results.</p>`}<//>`}
+ </div></div>`}
+ReactDOM.createRoot(document.getElementById("root")).render(h`<${App}/>`);
+</script>
+</body></html>
