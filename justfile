@@ -15,10 +15,6 @@ preview port="3000": install
     pid=$!; trap 'kill $pid 2>/dev/null' EXIT INT TERM; \
     cd frontend && bun run dev -- --port {{port}}
 
-# List available commands.
-default:
-    @just --list
-
 # Install code-generation dependencies from the lockfiles (run mise install first).
 setup:
     uv sync --project backend --locked
