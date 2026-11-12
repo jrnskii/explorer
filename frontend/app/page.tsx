@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 
 import type { City } from "@/components/city-picker"
+import { SiteHeader } from "@/components/site-header"
 import {
   EMPTY_TRIP_INPUTS,
   TripInputs,
@@ -40,16 +41,33 @@ export default function Home() {
   }, [status])
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-8">
-      <TripInputs
-        value={trip}
-        onChange={setTrip}
-        cities={CITIES}
-        loading={status === "loading"}
-        onSubmit={() => setStatus("loading")}
+    <div className="relative min-h-screen overflow-hidden">
+      <div
+        aria-hidden
+        className="dots pointer-events-none absolute inset-x-0 top-0 h-[420px] opacity-60 [mask-image:linear-gradient(#000,transparent)]"
       />
-      {status === "loading" && <TripOpportunitiesPlaceholder />}
-      {status === "done" && <TripOpportunities options={SAMPLE_OPTIONS} />}
-    </main>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-52 -left-40 size-[380px] rounded-full bg-[#e4f4ee]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-10 -right-48 size-[460px] rounded-full bg-[#dceef3]/70"
+      />
+      <div className="relative mx-auto w-full max-w-[1180px] px-4 sm:px-6">
+        <SiteHeader />
+        <main className="mt-4 flex flex-col gap-6 pb-16">
+          <TripInputs
+            value={trip}
+            onChange={setTrip}
+            cities={CITIES}
+            loading={status === "loading"}
+            onSubmit={() => setStatus("loading")}
+          />
+          {status === "loading" && <TripOpportunitiesPlaceholder />}
+          {status === "done" && <TripOpportunities options={SAMPLE_OPTIONS} />}
+        </main>
+      </div>
+    </div>
   )
 }
