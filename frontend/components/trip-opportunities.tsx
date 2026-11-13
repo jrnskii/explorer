@@ -80,10 +80,13 @@ function summarize(option: RoundTripOption) {
 export function TripOpportunity({
   option,
   rank,
+  travelers = 1,
   className,
 }: {
   option: RoundTripOption
   rank?: number
+  /** Prices are per adult; the total shown is multiplied by this. */
+  travelers?: number
   className?: string
 }) {
   const { home, stops, travelSeconds, totalSeconds, modes } = summarize(option)
@@ -107,11 +110,18 @@ export function TripOpportunity({
           <div className="shrink-0 text-right">
             <div className="text-xl font-semibold">
               {formatPrice(
-                option.total_price.amount,
+                String(Number(option.total_price.amount) * travelers),
                 option.total_price.currency
               )}
             </div>
-            <div className="text-xs text-muted-foreground">per adult</div>
+            <div className="text-xs text-muted-foreground">
+              {travelers === 1
+                ? "per adult"
+                : `for ${travelers} travellers · ${formatPrice(
+                    option.total_price.amount,
+                    option.total_price.currency
+                  )} each`}
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5 pt-1">
@@ -173,9 +183,11 @@ export function TripOpportunity({
 
 export function TripOpportunities({
   options,
+  travelers = 1,
   className,
 }: {
   options: RoundTripOption[]
+  travelers?: number
   className?: string
 }) {
   return (
@@ -193,6 +205,7 @@ export function TripOpportunities({
           key={option.path.map((l) => l.departure_at).join("|")}
           option={option}
           rank={i + 1}
+          travelers={travelers}
         />
       ))}
     </section>
