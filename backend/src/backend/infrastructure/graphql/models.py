@@ -43,6 +43,7 @@ class TransportType(StrEnum):
     """
 
     BUSSES = 'BUSSES'
+    FERRIES = 'FERRIES'
     PLANES = 'PLANES'
     TRAINS = 'TRAINS'
 
