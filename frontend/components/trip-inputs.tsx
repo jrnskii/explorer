@@ -174,6 +174,10 @@ type TripInputsProps = {
   value: TripInputsValue
   onChange: (value: TripInputsValue) => void
   cities: City[]
+  /** Async departure search (e.g. all European cities); falls back to `cities`. */
+  onSearchDeparture?: (query: string, signal: AbortSignal) => Promise<City[]>
+  /** Departure suggestions shown before the user types. */
+  departureSuggestions?: City[]
   /** Called when the user presses "Find opportunities" with a complete form. */
   onSubmit?: (value: TripInputsValue) => void
   /** Called instead of `onSubmit` for trips longer than 7 days, which require an account. */
@@ -360,6 +364,8 @@ export function TripInputs({
   value,
   onChange,
   cities,
+  onSearchDeparture,
+  departureSuggestions,
   onSubmit,
   onSignUp,
   loading = false,
@@ -403,6 +409,8 @@ export function TripInputs({
             value={value.departure}
             onChange={(c) => set("departure", c)}
             cities={cities}
+            onSearch={onSearchDeparture}
+            suggestions={departureSuggestions}
           />
         </SearchSegment>
 
