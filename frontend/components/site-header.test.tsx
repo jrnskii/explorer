@@ -25,7 +25,7 @@ test("Help links to the FAQ in the same tab", () => {
 test("each nav item has a decorative icon", () => {
   render(<SiteHeader />)
   const nav = screen.getByRole("navigation", { name: "Main" })
-  expect(nav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(6)
+  expect(nav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(7)
 })
 
 test("shows the saved trips count next to My trips", () => {

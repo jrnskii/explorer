@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { RegionPreferences } from "@/components/region-preferences"
+import { ThemePicker } from "@/components/theme-picker"
 import { cn } from "@/lib/utils"
 
 /** Placeholder entries: the routes don't exist yet. */
@@ -31,7 +32,7 @@ export function SiteHeader({
 }: {
   className?: string
   /** Which page the header is rendered on; marks Home as current only on the homepage. */
-  current?: "home" | "help"
+  current?: "home" | "help" | "pricing"
   /** Number of trips the user has saved, shown next to "My trips". */
   savedTripsCount?: number
 }) {
@@ -62,13 +63,15 @@ export function SiteHeader({
           Home
         </Link>
         <RegionPreferences />
+        <ThemePicker />
         {COMING_SOON.map(({ label, icon: Icon }) =>
-          label === "Help" ? (
+          label === "Help" || label === "Pricing" ? (
             <Link
               key={label}
-              href="/help"
-
-              aria-current={current === "help" ? "page" : undefined}
+              href={label === "Help" ? "/help" : "/pricing"}
+              aria-current={
+                current === label.toLowerCase() ? "page" : undefined
+              }
               className={cn(buttonVariants({ variant: "ghost" }), navButtonClass)}
             >
               <Icon aria-hidden strokeWidth={1.5} />
