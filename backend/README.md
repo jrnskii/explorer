@@ -97,6 +97,84 @@ failure, with diagnostics on stderr; a successful run prints a JSON mapping of
 dataset names to local directories on stdout. These are external reference data,
 not live travel availability. Check each dataset's license before use or redistribution.
 
+## European public-transport schedules (Mobility Database)
+
+Run `just download-schedules` to fetch the latest available GTFS Schedule ZIP for
+every catalogued feed with a European location. Set
+`MOBILITYDATABASE_REFRESH_TOKEN` from your Mobility Database account, or set
+`MOBILITYDATABASE_ACCESS_TOKEN` for an existing bearer token. Refresh tokens are
+exchanged at `/v1/tokens`; an expired access token is retried once after refresh
+when a refresh token is available. Credentials are read only from the environment.
+
+```sh
+just download-schedules
+just download-schedules --output-dir ./reference-data/schedules --page-size 500 --timeout 120
+# Extract relevant rail/bus/ferry scheduling data into DuckDB:
+just combine-schedules
+just combine-schedules --raw-dir ./reference-data/schedules/raw --output ./schedules.duckdb
+# Equivalent entry point:
+uv run --project backend --locked python -m backend.infrastructure.fixtures.download_mobilitydatabase
+```
+
+The default destination is the git-ignored
+`backend/src/backend/infrastructure/fixtures/data/mobilitydatabase/`. It contains
+`catalog.json` (selected feed metadata, including locations, source/license details,
+and service ranges where supplied), `raw/<feed-id>.zip` (unextracted schedules), and
+`manifest.json` (per-feed download outcomes and dataset metadata). Catalogue requests
+are paginated until exhausted, and feeds are deduplicated by ID rather than provider.
+Public hosted archives receive no API credentials. Downloads are streamed, checked
+as ZIPs, and SHA-256 verified when a hash is supplied before replacing existing files.
+Reruns reuse files matching the latest dataset hash; files without a hash download again.
+
+`just combine-schedules` writes `schedules.duckdb`. It retains rail, bus and
+ferry routes and referenced trips, stop times, stops (including station ancestors),
+calendars, frequencies, agencies and transfers. Shapes, bike attributes,
+unsupported modes, arbitrary files and binaries are skipped. Columns are an
+explicit scheduling projection, stored as VARCHAR with SQL NULL for missing
+values; IDs and times after 24:00:00 are preserved. Join source IDs using `feed_id`
+as well as the ID. Fare evaluation and canonical city mapping are separate work.
+See the [schema and recovery description](../docs/api_references/mobilitydatabase/README.md).
+
+Completed feeds commit transactionally to `schedules.staging.duckdb`; rerun the
+same command to resume unchanged feeds. Changed feeds are replaced, removed feeds
+are dropped after a successful run, and malformed relevant data fails the feed.
+The current feed rolls back on interruption; other completed feeds survive.
+Only a successful complete run atomically replaces the published database.
+Keep readers closed during publication and reopen afterward. Legacy JSON outputs
+and checkpoints are left untouched and are not reused. Stdout remains a JSON
+command summary; diagnostics and progress go to stderr. No provider calls occur
+during extraction.
+
+Feed extraction uses a bounded thread pool (default: up to four workers). Use
+`just combine-schedules --workers 8` to change it, or `--workers 1` for serial
+extraction. Each worker has an isolated temporary DuckDB file, one DuckDB query
+thread, and a 256 MB query-memory limit (not a total process-memory limit).
+Temporary files/spill space grow with active feeds. A single coordinator merges
+results transactionally into the staging database in archive order; completed
+feeds still checkpoint independently, and failed feeds do not prevent the other
+results from being saved. In-flight work finishes before temporary cleanup on
+interruption, so shutdown may wait for an active feed.
+
+
+Europe uses the explicit `EUROPE_COUNTRY_CODES` set in the script: European states
+and dependencies, including the UK, Switzerland, Kosovo, Cyprus, the Caucasus, and
+transcontinental Russia, Turkey, and Kazakhstan. Any matching location includes the
+whole feed, including cross-border services. Feeds without matching country metadata
+are excluded. All feed statuses are included and retained in `catalog.json`; this
+includes potentially obsolete schedules. This downloads one latest dataset per feed,
+not historical versions, GTFS Realtime, or GBFS. Coverage is limited to feeds listed
+and hosted by Mobility Database, not every provider operating in Europe.
+
+A missing hosted dataset is marked `unavailable`. Individual failures are recorded
+as `failed` and downloading continues; completed archives remain intact. The manifest
+is updated after each feed. Exit status is 1 for catalogue failures or any unavailable
+or failed feed, 2 for invalid CLI arguments, and 0 for complete success (including an
+empty selection). A completed catalogue run prints JSON counts and the output path to
+stdout; diagnostics go to stderr. Rerun to retry failures. Network requests use a
+finite timeout; failures other than token expiry are not automatically retried.
+These are current upstream snapshots, not pinned fixtures or live availability.
+Respect the individual feeds' licenses when using or redistributing the data.
+
 ## Static EU flight network
 
 `backend.infrastructure.fixtures.eu_network.generate_network()` returns a fixed EU-27

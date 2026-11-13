@@ -28,6 +28,16 @@ download-datasets *args:
 # Download all three external fixture datasets.
 download-all-datasets: download-datasets
 
+# Download latest GTFS schedules for all European Mobility Database feeds.
+[positional-arguments]
+download-schedules *args:
+    uv run --project backend --locked python -m backend.infrastructure.fixtures.download_mobilitydatabase "$@"
+
+# Extract relevant rail/bus/ferry GTFS scheduling data into local DuckDB.
+[positional-arguments]
+combine-schedules *args:
+    uv run --project backend --locked python -m backend.infrastructure.fixtures.combine_mobilitydatabase "$@"
+
 # Generate Python models and TypeScript types from the v1 GraphQL schema.
 codegen: codegen-python codegen-typescript
 
