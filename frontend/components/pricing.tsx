@@ -1,8 +1,7 @@
 "use client"
 
-import Link from "next/link"
 import { useState } from "react"
-import { Check, X } from "lucide-react"
+import { Minus, Plus, X } from "lucide-react"
 
 import {
   Accordion,
@@ -10,15 +9,40 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
 import {
-  CREDIT_STEPS,
+  CUSTOM_CREDITS,
   PRICING_FAQ,
   PRICING_PLANS,
+  clampCredits,
+  customTotalCents,
+  customUnitCents,
+  formatEuroCents,
+  hasCustomDiscount,
   type PricingPlan,
 } from "@/lib/pricing-data"
 import { SUPPORT_EMAIL } from "@/lib/faq-data"
 import { cn } from "@/lib/utils"
+
+/*
+ * The Pricing page uses its own fixed palette so it is unaffected by the
+ * app-wide theme picker: rosso #69070E, ink #171717, white, soft #FAF9F8,
+ * muted #666666 and border #E9E7E6. Poppins comes from the root layout.
+ */
+const solidButton =
+  "h-10 rounded-md bg-[#69070E] px-4 text-sm font-semibold text-white hover:bg-[#4F050B]"
+const stepperButton =
+  "size-10 shrink-0 rounded-md border-[#E9E7E6] bg-white text-[#171717] hover:bg-[#FAF9F8] hover:text-[#171717] dark:border-[#E9E7E6] dark:bg-white dark:hover:bg-[#FAF9F8]"
+
+type Notice = {
+  source: "plans" | "custom"
+  title: string
+  message: string
+}
+
+const NO_PAYMENT =
+  "No payment has been taken and no credits have been added to your account."
 
 function PlanCard({
   plan,
@@ -28,201 +52,294 @@ function PlanCard({
   onSelect: (plan: PricingPlan) => void
 }) {
   const titleId = `plan-${plan.id}-title`
-  const ctaClass = cn(
-    "h-10 w-full rounded-lg text-sm font-semibold",
-    plan.featured
-      ? "bg-forest text-white hover:bg-deep"
-      : "bg-mint text-deep hover:bg-sage/60"
-  )
   return (
-    <div className="relative flex pt-3 md:pt-3">
-      {plan.featured && (
-        <span className="absolute top-0 left-1/2 z-10 -translate-x-1/2 rounded-full bg-forest px-3 py-0.5 text-xs font-semibold whitespace-nowrap text-white">
-          Most popular
-        </span>
+    <article
+      aria-labelledby={titleId}
+      data-featured={plan.featured || undefined}
+      className={cn(
+        "flex flex-col rounded-md border p-6",
+        plan.featured
+          ? "border-[#69070E] bg-[#69070E] text-white"
+          : "border-[#E9E7E6] bg-[#FAF9F8] text-[#171717]"
       )}
-      <article
-        aria-labelledby={titleId}
-        data-featured={plan.featured || undefined}
+    >
+      <p
+        aria-hidden={plan.featured ? undefined : true}
+        className="h-4 text-[11px] leading-4 font-medium tracking-wider text-white/80"
+      >
+        {plan.featured ? "MOST POPULAR" : ""}
+      </p>
+      <h2
+        id={titleId}
         className={cn(
-          "flex w-full flex-col gap-4 rounded-2xl bg-card p-5",
-          plan.featured
-            ? "border-2 border-forest shadow-[0_4px_16px_rgba(52,92,73,0.10)]"
-            : "border border-line"
+          "mt-2 text-base font-medium",
+          plan.featured ? "text-white" : "text-[#171717]"
         )}
       >
-        <header className="flex flex-col gap-0.5">
-          <h3 id={titleId} className="text-lg font-bold text-ink">
-            {plan.name}
-          </h3>
-          <p className="text-sm text-muted-foreground">{plan.tagline}</p>
-        </header>
-        <div>
-          <p className="text-3xl font-extrabold text-ink">{plan.price}</p>
-          <p className="text-sm text-muted-foreground">{plan.allowance}</p>
-        </div>
-        <ul className="flex flex-1 flex-col gap-2 text-sm text-charcoal">
-          {plan.features.map((f) => (
-            <li key={f} className="flex items-start gap-2">
-              <Check
-                aria-hidden
-                strokeWidth={2}
-                className="mt-0.5 size-4 shrink-0 text-forest"
-              />
-              {f}
-            </li>
-          ))}
-        </ul>
-        {plan.purchasable ? (
-          <Button
-            type="button"
-            variant="ghost"
-            className={ctaClass}
-            onClick={() => onSelect(plan)}
-          >
-            {plan.cta}
-          </Button>
-        ) : (
-          <Link
-            href="/"
-            className={cn(buttonVariants({ variant: "ghost" }), ctaClass)}
-          >
-            {plan.cta}
-          </Link>
+        {plan.name}
+      </h2>
+      <p className="mt-3 text-4xl font-semibold">{plan.price}</p>
+      <p
+        className={cn(
+          "mt-2 text-sm",
+          plan.featured ? "text-white/80" : "text-[#666666]"
         )}
-      </article>
+      >
+        {plan.note}
+      </p>
+      <div className="mt-auto pt-8">
+        <Button
+          type="button"
+          className={cn(
+            solidButton,
+            "w-full",
+            plan.featured &&
+              "border-white bg-white text-[#69070E] hover:bg-[#FAF9F8]"
+          )}
+          onClick={() => onSelect(plan)}
+        >
+          {plan.cta}
+        </Button>
+      </div>
+    </article>
+  )
+}
+
+function NoticePanel({
+  notice,
+  onClose,
+}: {
+  notice: Notice
+  onClose: () => void
+}) {
+  return (
+    <div
+      role="status"
+      className="flex items-start justify-between gap-3 rounded-md border border-[#E9E7E6] bg-[#FAF9F8] p-4 text-sm"
+    >
+      <div className="flex flex-col gap-1">
+        <p className="font-semibold text-[#171717]">{notice.title}</p>
+        <p className="text-[#666666]">{notice.message}</p>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Close"
+        className="text-[#171717] hover:bg-[#E9E7E6] hover:text-[#171717]"
+        onClick={onClose}
+      >
+        <X aria-hidden />
+      </Button>
     </div>
   )
 }
 
 export function Pricing() {
-  const [selected, setSelected] = useState<PricingPlan | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
+  const [quantity, setQuantity] = useState<number>(CUSTOM_CREDITS.default)
   const [openId, setOpenId] = useState<string | null>(null)
 
+  const totalCents = customTotalCents(quantity)
+  const total = formatEuroCents(totalCents)
+  const discounted = hasCustomDiscount(quantity)
+  const creditsLabel = `${quantity} ${quantity === 1 ? "credit" : "credits"}`
+
+  const selectPlan = (plan: PricingPlan) =>
+    setNotice(
+      plan.id === "free"
+        ? {
+            source: "plans",
+            title: "Sign-up coming soon",
+            message:
+              "Accounts are not available yet, so you can't get started with the Free plan at the moment. No account has been created.",
+          }
+        : {
+            source: "plans",
+            title: "Checkout coming soon",
+            message: `${plan.name} · ${plan.price}. ${NO_PAYMENT}`,
+          }
+    )
+
   return (
-    <div className="flex flex-col gap-10">
-      <section aria-labelledby="pricing-title" className="flex flex-col gap-4">
+    <div className="flex w-full flex-col gap-10 rounded-md border border-[#E9E7E6] bg-white px-4 py-10 font-sans text-[#171717] sm:px-8 sm:py-12">
+      <section
+        aria-labelledby="pricing-title"
+        className="mx-auto flex w-full max-w-4xl flex-col gap-8"
+      >
         <div className="text-center">
-          <h1 id="pricing-title" className="text-3xl font-bold text-ink sm:text-4xl">
-            Choose how you explore.
+          <h1
+            id="pricing-title"
+            className="text-3xl font-semibold text-[#171717] sm:text-4xl"
+          >
+            Make room for more adventures.
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-            Start for free. Get extra credits whenever you need them. No
-            subscription required.
+          <p className="mt-3 text-base text-[#666666]">
+            Start free or choose how many credits you need.
           </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
           {PRICING_PLANS.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} onSelect={setSelected} />
+            <PlanCard key={plan.id} plan={plan} onSelect={selectPlan} />
           ))}
         </div>
 
-        {selected && (
-          <div
-            role="status"
-            className="flex items-start justify-between gap-3 rounded-xl border border-sage bg-mint-pale p-4 text-sm"
-          >
-            <div className="flex flex-col gap-1">
-              <p className="font-semibold text-ink">
-                {selected.name} · {selected.price}
-              </p>
-              <p className="text-charcoal">
-                Checkout is coming soon. These are proposed prices; no payment
-                has been taken and no credits have been added to your account.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Close"
-              onClick={() => setSelected(null)}
-            >
-              <X aria-hidden />
-            </Button>
-          </div>
+        {notice?.source === "plans" && (
+          <NoticePanel notice={notice} onClose={() => setNotice(null)} />
         )}
+      </section>
 
-        <p className="text-center text-xs text-muted-foreground">
+      <section
+        aria-labelledby="custom-title"
+        className="mx-auto flex w-full max-w-4xl flex-col gap-5 rounded-md border border-[#E9E7E6] p-6 sm:p-8"
+      >
+        <div>
+          <h2 id="custom-title" className="text-xl font-semibold text-[#171717]">
+            Or choose your own.
+          </h2>
+          <p className="mt-1 text-sm text-[#666666]">
+            €0.50 per credit. Get 20% off when you buy 20 or more.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Decrease credits"
+            className={stepperButton}
+            disabled={quantity <= CUSTOM_CREDITS.min}
+            onClick={() => setQuantity((q) => clampCredits(q - CUSTOM_CREDITS.step))}
+          >
+            <Minus aria-hidden />
+          </Button>
+          <Slider
+            min={CUSTOM_CREDITS.min}
+            max={CUSTOM_CREDITS.max}
+            step={CUSTOM_CREDITS.step}
+            value={[quantity]}
+            onValueChange={(v) => {
+              const next = Array.isArray(v) ? v[0] : v
+              setQuantity(clampCredits(Number(next)))
+            }}
+            thumbProps={{
+              getAriaLabel: () => "Number of credits",
+              getAriaValueText: (_formatted, value) =>
+                `${value} ${value === 1 ? "credit" : "credits"}`,
+            }}
+            className={cn(
+              "px-2",
+              "[&_[data-slot=slider-track]]:h-1.5 [&_[data-slot=slider-track]]:bg-[#E9E7E6]",
+              "[&_[data-slot=slider-range]]:bg-[#69070E]",
+              "[&_[data-slot=slider-thumb]]:size-5 [&_[data-slot=slider-thumb]]:border-[#69070E] [&_[data-slot=slider-thumb]]:ring-[#69070E]/30"
+            )}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Increase credits"
+            className={stepperButton}
+            disabled={quantity >= CUSTOM_CREDITS.max}
+            onClick={() => setQuantity((q) => clampCredits(q + CUSTOM_CREDITS.step))}
+          >
+            <Plus aria-hidden />
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p
+              data-testid="custom-quantity"
+              className="text-sm font-medium text-[#171717]"
+            >
+              {creditsLabel}
+            </p>
+            <p
+              data-testid="custom-total"
+              className="text-3xl font-semibold text-[#171717]"
+            >
+              {total}
+            </p>
+            <p className="text-sm text-[#666666]">
+              {formatEuroCents(customUnitCents(quantity))} per credit
+            </p>
+            <p className="min-h-5 text-sm font-medium text-[#69070E]">
+              {discounted ? `${CUSTOM_CREDITS.discountPercent}% off applied` : ""}
+            </p>
+          </div>
+          <Button
+            type="button"
+            className={cn(solidButton, "w-full sm:w-auto")}
+            onClick={() =>
+              setNotice({
+                source: "custom",
+                title: "Checkout coming soon",
+                message: `${creditsLabel} · ${total}. ${NO_PAYMENT}`,
+              })
+            }
+          >
+            Buy {creditsLabel} — {total}
+          </Button>
+        </div>
+
+        {notice?.source === "custom" && (
+          <NoticePanel notice={notice} onClose={() => setNotice(null)} />
+        )}
+      </section>
+
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 text-sm text-[#666666]">
+        <p>
+          Purchased credits stay available until you use them. Free credits
+          refresh every month.
+        </p>
+        <p className="text-xs">
           Credit packages and policies are proposals for Explorer&apos;s
           upcoming service. Payments are not available in this prototype.
         </p>
-      </section>
+      </div>
 
-      <section aria-labelledby="credits-title" className="flex flex-col gap-4">
-        <h2 id="credits-title" className="text-center text-2xl font-bold text-ink">
-          How do credits work?
-        </h2>
-        <ol className="grid gap-3 md:grid-cols-3">
-          {CREDIT_STEPS.map((step, i) => (
-            <li
-              key={step.title}
-              className="flex items-start gap-3 rounded-xl border border-line bg-card p-4"
-            >
-              <span
-                aria-hidden
-                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-mint text-sm font-bold text-deep"
-              >
-                {i + 1}
-              </span>
-              <div>
-                <h3 className="text-sm font-semibold text-ink">{step.title}</h3>
-                <p className="text-sm text-muted-foreground">{step.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-        <p className="text-center text-sm text-muted-foreground">
-          You&apos;ll see how many credits a feature costs before choosing to
-          use it.
-        </p>
-      </section>
-
-      <section aria-labelledby="pricing-faq-title" className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        <h2 id="pricing-faq-title" className="text-center text-2xl font-bold text-ink">
+      <section
+        aria-labelledby="pricing-faq-title"
+        className="mx-auto flex w-full max-w-4xl flex-col gap-3"
+      >
+        <h2
+          id="pricing-faq-title"
+          className="text-xl font-semibold text-[#171717]"
+        >
           Pricing questions
         </h2>
         <Accordion
           value={openId ? [openId] : []}
           onValueChange={(v) => setOpenId(v[0] ? String(v[0]) : null)}
-          className="overflow-hidden rounded-xl border border-sage bg-card"
+          className="border-t border-[#E9E7E6]"
         >
           {PRICING_FAQ.map((item) => (
-            <AccordionItem key={item.id} value={item.id} className="not-last:border-sage">
-              <AccordionTrigger className="text-deep">
+            <AccordionItem
+              key={item.id}
+              value={item.id}
+              className="border-b border-[#E9E7E6]"
+            >
+              <AccordionTrigger className="px-0 text-[#171717] hover:bg-transparent sm:px-0 [&_svg]:text-[#69070E]">
                 {item.question}
               </AccordionTrigger>
-              <AccordionContent className="leading-relaxed text-charcoal">
+              <AccordionContent className="px-0 leading-relaxed text-[#666666] sm:px-0">
                 <p>{item.answer}</p>
               </AccordionContent>
             </AccordionItem>
           ))}
         </Accordion>
-      </section>
-
-      <section
-        aria-labelledby="pricing-contact-title"
-        className="flex flex-col items-start gap-3 rounded-xl border bg-mint p-5 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div>
-          <h2 id="pricing-contact-title" className="text-base font-bold text-ink">
-            Still have questions?
-          </h2>
-          <p className="text-sm text-charcoal">
-            We&apos;re happy to help with credits, pricing and your travel
-            plans.
-          </p>
-        </div>
-        <a
-          href={`mailto:${SUPPORT_EMAIL}`}
-          className={cn(
-            buttonVariants({ variant: "default" }),
-            "shrink-0 bg-forest text-white hover:bg-deep"
-          )}
-        >
-          Email Explorer
-        </a>
+        <p className="text-sm text-[#666666]">
+          Still have questions?{" "}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="font-medium text-[#69070E] underline underline-offset-4"
+          >
+            Email Explorer
+          </a>
+        </p>
       </section>
     </div>
   )

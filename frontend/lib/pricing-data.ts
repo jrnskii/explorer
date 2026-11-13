@@ -1,77 +1,80 @@
 export type PricingPlan = {
   id: "free" | "credits-5" | "credits-12"
   name: string
-  tagline: string
-  /** Display price, e.g. "€2.99". Prototype/proposed only. */
+  /** Display price, e.g. "€2.25". Prototype/proposed only. */
   price: string
-  allowance: string
-  features: string[]
+  /** Short line under the price. */
+  note: string
   cta: string
   featured: boolean
-  /** Free plan returns to the homepage; paid plans show the "coming soon" panel. */
-  purchasable: boolean
+}
+
+export const CUSTOM_CREDITS = {
+  min: 1,
+  max: 50,
+  default: 10,
+  step: 1,
+  /** Quantity from which the discount applies (inclusive). */
+  discountFrom: 20,
+  discountPercent: 20,
+  /** Price per credit in euro cents. */
+  unitCents: 50,
+} as const
+
+/** Clamps to a whole number within the allowed range; non-finite input falls back to the default. */
+export function clampCredits(value: number): number {
+  if (!Number.isFinite(value)) return CUSTOM_CREDITS.default
+  return Math.min(
+    CUSTOM_CREDITS.max,
+    Math.max(CUSTOM_CREDITS.min, Math.round(value))
+  )
+}
+
+export function hasCustomDiscount(quantity: number): boolean {
+  return clampCredits(quantity) >= CUSTOM_CREDITS.discountFrom
+}
+
+/** Per-credit price in cents for a custom purchase (€0.50, or €0.40 from 20 credits). */
+export function customUnitCents(quantity: number): number {
+  return hasCustomDiscount(quantity)
+    ? (CUSTOM_CREDITS.unitCents * (100 - CUSTOM_CREDITS.discountPercent)) / 100
+    : CUSTOM_CREDITS.unitCents
+}
+
+/** Total in euro cents; integer arithmetic avoids floating-point rounding errors. */
+export function customTotalCents(quantity: number): number {
+  const q = clampCredits(quantity)
+  return q * customUnitCents(q)
+}
+
+export function formatEuroCents(cents: number): string {
+  return `€${(cents / 100).toFixed(2)}`
 }
 
 export const PRICING_PLANS: PricingPlan[] = [
   {
     id: "free",
     name: "Free",
-    tagline: "For your first adventures",
     price: "€0",
-    allowance: "2 credits · Every month",
-    features: [
-      "2 free credits each month",
-      "Basic multi-city trip planning",
-      "Explore routes within free limits",
-      "No payment required",
-    ],
-    cta: "Start exploring",
+    note: "Includes 2 credits every month.",
+    cta: "Get started",
     featured: false,
-    purchasable: false,
   },
   {
     id: "credits-5",
     name: "5 credits",
-    tagline: "For a little more freedom",
-    price: "€2.99",
-    allowance: "5 credits · One-time purchase",
-    features: [
-      "5 extra planning credits",
-      "Unlock longer-trip searches",
-      "Refresh journey prices when available",
-      "Purchased credits won't expire",
-    ],
-    cta: "Get 5 credits",
+    price: "€2.25",
+    note: "€0.45 per credit.",
+    cta: "Buy credits",
     featured: true,
-    purchasable: true,
   },
   {
     id: "credits-12",
     name: "12 credits",
-    tagline: "For your next big adventure",
-    price: "€6.99",
-    allowance: "12 credits · One-time purchase",
-    features: [
-      "12 extra planning credits",
-      "Plan more journeys",
-      "Refresh journey prices when available",
-      "Purchased credits won't expire",
-    ],
-    cta: "Get 12 credits",
+    price: "€4.80",
+    note: "€0.40 per credit.",
+    cta: "Buy credits",
     featured: false,
-    purchasable: true,
-  },
-]
-
-export const CREDIT_STEPS = [
-  { title: "Start free", body: "Get 2 credits each month to explore Explorer." },
-  {
-    title: "Unlock more",
-    body: "Use credits for longer-trip searches and supported price refreshes.",
-  },
-  {
-    title: "Pay your way",
-    body: "Buy extra credits when you need them, without a subscription.",
   },
 ]
 
