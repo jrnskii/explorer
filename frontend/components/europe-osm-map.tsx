@@ -84,6 +84,12 @@ function Overlay({
     return [p.x, p.y]
   }
 
+  // Until the container has a size and the view is fitted, projection yields NaN.
+  const [probeX, probeY] = project(fit[0] ?? [0, 0])
+  if (size.x === 0 || size.y === 0 || !Number.isFinite(probeX + probeY)) {
+    return null
+  }
+
   return (
     <div className="pointer-events-none absolute inset-0 z-[500]">
       {children({ project, width: size.x, height: size.y })}

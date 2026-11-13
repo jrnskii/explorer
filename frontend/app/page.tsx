@@ -31,6 +31,14 @@ const CITIES: City[] = [
 // Stable reference: CityPicker re-runs its search effect when this changes.
 const searchDeparture = (query: string) => searchEuropeCities(query)
 
+// Transparent in the middle, fully opaque at the viewport borders: the blur fades in toward the edges.
+const EDGE_MASK =
+  "radial-gradient(ellipse at center, transparent 55%, black 100%)"
+
+// Fades the page background colour in from the viewport borders (white in the light theme).
+const VIGNETTE =
+  "radial-gradient(ellipse at center, transparent 50%, color-mix(in srgb, var(--vignette) 85%, transparent) 100%)"
+
 const MOCK_SEARCH_DELAY_MS = 10000
 
 export default function Home() {
@@ -56,9 +64,26 @@ export default function Home() {
   }, [status])
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
-      <SiteHeader />
-      <main className="flex flex-col gap-6 py-6">
+    <>
+      <EuropeLoader
+        className="fixed inset-0 z-0 h-screen min-h-0"
+        label="Finding your trip"
+        departure={trip.departure}
+        loading={status === "loading"}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-[1] backdrop-blur-md"
+        style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-[1] [--vignette:white] dark:[--vignette:var(--background)]"
+        style={{ background: VIGNETTE }}
+      />
+      <div className="relative z-10 mx-auto w-full max-w-5xl px-4 sm:px-6">
+        <SiteHeader />
+        <main className="flex flex-col gap-6 py-6">
         <TripInputs
           value={trip}
           onChange={setTrip}
@@ -71,19 +96,15 @@ export default function Home() {
             setStatus("loading")
           }}
         />
-        <EuropeLoader
-          className="h-[28rem] rounded-xl border sm:h-[34rem]"
-          label="Finding your trip"
-          departure={trip.departure}
-          loading={status === "loading"}
-        />
+
         {status === "done" && (
           <TripOpportunities
             options={SAMPLE_OPTIONS}
             travelers={searchedTravelers}
           />
         )}
-      </main>
-    </div>
+        </main>
+      </div>
+    </>
   )
 }

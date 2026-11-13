@@ -537,8 +537,8 @@ export function TripInputs({
 
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span id={`${id}-modes`} className="text-sm text-muted-foreground">
-            Travel by:
+          <span id={`${id}-modes`} className="sr-only">
+            Travel by
           </span>
           <ToggleGroup
             multiple

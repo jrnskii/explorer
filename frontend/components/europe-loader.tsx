@@ -171,12 +171,12 @@ function EuropeLoaderWalk({
       aria-live={loading ? "polite" : undefined}
       aria-label={loading ? label : "Map of European capitals"}
       className={cn(
-        "relative isolate min-h-[28rem] w-full overflow-hidden bg-background",
+        "relative isolate min-h-[28rem] w-full overflow-hidden bg-white dark:bg-background",
         className
       )}
     >
       <style>{CSS}</style>
-      <EuropeOsmMap fit={graph.points} className="absolute inset-0 z-0 bg-background">
+      <EuropeOsmMap fit={graph.points} className="absolute inset-0 z-0 bg-white! dark:bg-background!">
         {({ project, width, height }) => (
           <svg
             width={width}
