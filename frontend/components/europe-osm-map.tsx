@@ -95,15 +95,29 @@ function Overlay({
  * Country-outline map (Leaflet + GeoJSON, no tiles) fitted to `fit`, with a
  * pixel-space overlay for custom drawing. Client-only: Leaflet needs `window`.
  */
-export default function EuropeOsmMap({
-  fit,
-  className,
-  children,
-}: {
+export default function EuropeOsmMap(props: MapProps) {
+  // Cache Components keeps a route's React state alive while hiding it on
+  // client-side navigation, but runs effect cleanups, which destroy the
+  // Leaflet map. Re-rendering the overlay against the destroyed map throws
+  // (`el._leaflet_pos`), so the map is only mounted while effects are active
+  // and is rebuilt from scratch when the route is shown again.
+  const [active, setActive] = useState(false)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActive(true)
+    return () => setActive(false)
+  }, [])
+  if (!active) return <div className={props.className} />
+  return <LeafletMap {...props} />
+}
+
+type MapProps = {
   fit: readonly LonLat[]
   className?: string
   children: (api: OverlayApi) => ReactNode
-}) {
+}
+
+function LeafletMap({ fit, className, children }: MapProps) {
   return (
     <MapContainer
       {...STATIC_MAP_OPTIONS}
