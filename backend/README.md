@@ -621,3 +621,138 @@ These are unverified reference connections, not time-feasible itineraries or
 current availability. `live_search_eligible` is false. Publication dates and rights
 have not been verified. Graph structure is frozen; attribute dictionaries remain
 mutable and should be treated as read-only. Binary reloads are structurally frozen; legacy node-link JSON reloads are mutable by default.
+
+## Cheapest scheduled round trips (offline core)
+
+Run the first offline slice with v1 GraphQL-shaped JSON settings:
+
+```sh
+uv run --project backend --locked python -m backend.presentation.cli.round_trip \
+  --request backend/examples/round_trip.json --seed 42 --max-results 10
+```
+
+The CLI emits a JSON envelope with `options` shaped as `RoundTripOption`, exact
+string amounts, `from` aliases, synthetic provenance, explored-state count,
+`truncation_reasons`, and `results_limited`. Invalid input/provider coverage exits
+with status 2 and diagnostics on stderr. This is a CLI, not an executable GraphQL
+server; output is validated against the shared schema and generated models.
+
+The provider-independent `application.round_trip_search.find_round_trips` accepts
+validated `domain.planning.SearchSettings` and a finite snapshot of independently
+purchasable `JourneyOffer` values. Future adapters can implement
+`application.ports.JourneyOfferProvider` without changing traversal. Each offer
+can contain multiple physical legs, but its price is counted once. Internal
+connections participate in excluded/mandatory city checks. Under v1, endpoint
+presence constitutes a visit; no minimum stay is inferred. Branches end on their
+first return home. Waiting is checked for feasibility; ties in price are ranked
+by summed movement seconds, excluding waiting.
+
+`expenses_tolerance` is the absolute inclusive budget. `time_tolerance` is the
+allowed deviation in minutes around the target return instant, including an
+exact match at zero. The earliest departure remains a hard lower bound. All
+instants require explicit UTC offsets. Different currencies are rejected rather
+than implicitly converted. The core preserves supplied Decimal amounts; the
+Ignav fixture already uses float amounts, converted with `Decimal(str(amount))`
+at this synthetic adapter boundary.
+
+The demo has fixture-local canonical IDs `pl-warsaw`, `pl-krakow`, `fr-paris`,
+`gb-london`, and `nl-amsterdam`. Flights reuse the same `MockIgnavGenerator` as
+`mock_ignav.py`, requesting direct, one-adult, independent one-way offers. All
+five-city directed airport pairs are hypothetical fixture coverage. Train
+(Warsaw/Krakow), bus (Paris/Amsterdam), and ferry (London/Amsterdam) services are
+explicit synthetic corridors in both directions, departing at 08:00/16:00 UTC.
+`StaticTransportPrices.train/bus/ferry` supply deterministic USD amounts. These
+prices, schedules, ferry city access assumptions, and flights are **not live
+availability**. No terminal-access, check-in, or boarding-time guarantee is made.
+
+The demo supports USD and horizons up to 31 days. It resolves the overlay once
+before exploration; no network or paid requests occur. Core limits default to
+8 physical legs, 100,000 explored states, and 20 retained results. Result limits
+retain the best options encountered while continuing exploration; leg/state
+limits explicitly report truncation. Cheapest is relative to the supplied
+schedule snapshot and selected limits, not a global market-price guarantee.
+Provider errors are distinct from a successful empty result.
+
+This implements the offline solver/provider slice of `IMPLEMENTATION.md`.
+Production catalog mapping, historical observations, calendar-aware GTFS
+services, live providers, terminal transfers, and the evolved uncertainty/API/UI
+contracts remain separate delivery stages. Synthetic observations are not
+written to real price history or reference graph weights.
+
+### Verbose Vilnius demo
+
+Run a small, fixed-date example from the repository root:
+
+```sh
+just demo-round-trip
+# Optional: change the mock flight seed.
+just demo-round-trip --seed 7
+```
+
+The equivalent module command is
+`uv run --project backend --locked python -m backend.presentation.cli.round_trip_demo`.
+
+It starts and ends in **Vilnius** (`lt-vilnius`), requires Krakow, and compares
+synthetic buses/trains via Warsaw with seeded Ignav mock flights between Warsaw
+and Krakow. The search runs December 1–3, 2026 with a USD 200 budget. With the
+default seed 42, the cheapest trip costs USD 98.00. Vilnius surface services in
+this demo are invented; this does not add Vilnius to the general provider catalog.
+
+Every provider lookup, generated service, offer inspection/filter, explored
+state, branch expansion/rejection, candidate ranking, and final summary is logged
+to stderr. Machine-readable results remain JSON on stdout. Save both separately:
+
+```sh
+uv run --project backend --locked python -m backend.presentation.cli.round_trip_demo \
+  > results.json 2> actions.log
+```
+
+Use `--seed INTEGER` to change the mock flights. Fixed dates and seeds make the
+trace repeatable. The reusable solver emits the same detailed trace through the
+standard Python `logging` API when its caller enables DEBUG logging.
+
+### Map-ready route output
+
+The existing `shared/graphql/schema_v1.graphql` now defines `City` and requires
+`from_city` / `to_city` on each `TripLeg`. Both search CLIs serialize through the
+same contract. Existing `from` / `to` identifiers and timing fields are preserved:
+
+```json
+{
+  "from": "lt-vilnius",
+  "to": "pl-warsaw",
+  "from_city": {
+    "id": "lt-vilnius",
+    "name": "Vilnius",
+    "latitude": 54.6833333,
+    "longitude": 25.3166667
+  },
+  "to_city": {
+    "id": "pl-warsaw",
+    "name": "Warsaw",
+    "latitude": 52.25,
+    "longitude": 21.0
+  },
+  "departure_at": "2026-12-01T08:00:00Z",
+  "arrival_at": "2026-12-01T16:00:00Z",
+  "time_in_travel": 28800,
+  "transport_type": "BUSSES"
+}
+```
+
+Coordinates are finite WGS 84 decimal degrees: latitude in `[-90, 90]`, longitude
+in `[-180, 180]`. Endpoint objects must have IDs equal to `from` / `to`. Missing
+city mappings are errors; they are never replaced with `(0, 0)`. IDs are canonical
+within this application/fixture catalog, not universal identifiers or OSM node IDs.
+The fixed city-centre markers come from the local `Cities.csv` snapshot by
+[Work With Data](https://www.workwithdata.com/datasets/cities), licensed CC BY 4.0;
+see `src/backend/infrastructure/fixtures/data/cities/README.md`. The source's
+Cracow label is displayed as Krakow. Timetables and fares remain synthetic.
+
+For a Leaflet-style overlay, use `[city.latitude, city.longitude]`. For GeoJSON
+or MapLibre, use `[city.longitude, city.latitude]`. Interpolate from `from_city`
+to `to_city` between the leg's `departure_at` and `arrival_at`, and hold the marker
+at the city during gaps between legs. These endpoints support a schematic
+animation; actual road/rail/ferry tracks or aircraft positions require separate
+geometry/position data. No map tiles, geocoder, or network requests are required
+to resolve these endpoint markers. This change supplies data, not a map renderer.

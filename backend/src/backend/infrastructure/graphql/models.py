@@ -25,6 +25,18 @@ An exact, non-negative decimal encoded as a JSON string, such as \\"149.95\\".
 """
 
 
+type Float = float
+"""
+The `Float` scalar type represents signed double-precision fractional values as specified by [IEEE 754](https://en.wikipedia.org/wiki/IEEE_floating_point).
+"""
+
+
+type ID = str
+"""
+The `ID` scalar type represents a unique identifier, often used to refetch an object or as key for a cache. The ID type appears in a JSON response as a String; however, it is not intended to be human-readable. When expected as an input type, any string (such as `"4"`) or integer (such as `4`) input value will be accepted as an ID.
+"""
+
+
 type Int = int
 """
 The `Int` scalar type represents non-fractional signed whole numeric values. Int can represent values between -(2^31) and 2^31 - 1.
@@ -48,6 +60,25 @@ class TransportType(StrEnum):
     TRAINS = 'TRAINS'
 
 
+class City(BaseModel):
+    """
+    A city marker in WGS 84 decimal degrees, suitable for an OpenStreetMap overlay.
+    Coordinates represent the city centre, not a terminal or a vehicle position.
+    """
+
+    id: ID = Field(
+        ...,
+        description='Canonical application city identifier, matching the corresponding leg endpoint.\nThis identifier is not an OpenStreetMap node ID or a globally universal ID.',
+    )
+    latitude: Float = Field(
+        ..., description='Finite WGS 84 latitude in the inclusive range [-90, 90].'
+    )
+    longitude: Float = Field(
+        ..., description='Finite WGS 84 longitude in the inclusive range [-180, 180].'
+    )
+    name: String
+
+
 class Money(BaseModel):
     amount: Decimal = Field(
         ..., description='Non-negative amount expressed in major currency units.'
@@ -66,11 +97,17 @@ class TripLeg(BaseModel):
     from_: String = Field(
         ..., alias='from', description='Canonical departure city identifier.'
     )
+    from_city: City = Field(
+        ..., description='Departure city marker; from_city.id must equal from.'
+    )
     time_in_travel: Int = Field(
         ...,
         description='Travel duration in whole seconds, equal to arrival_at minus departure_at.\nDoes not include waiting time before or after this leg.',
     )
     to: String = Field(..., description='Canonical arrival city identifier.')
+    to_city: City = Field(
+        ..., description='Arrival city marker; to_city.id must equal to.'
+    )
     transport_type: TransportType
 
 

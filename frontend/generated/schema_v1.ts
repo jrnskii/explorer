@@ -13,6 +13,24 @@ export type Scalars = {
   Decimal: { input: string; output: string; }
 };
 
+/**
+ * A city marker in WGS 84 decimal degrees, suitable for an OpenStreetMap overlay.
+ * Coordinates represent the city centre, not a terminal or a vehicle position.
+ */
+export type City = {
+  __typename?: 'City';
+  /**
+   * Canonical application city identifier, matching the corresponding leg endpoint.
+   * This identifier is not an OpenStreetMap node ID or a globally universal ID.
+   */
+  id: Scalars['ID']['output'];
+  /** Finite WGS 84 latitude in the inclusive range [-90, 90]. */
+  latitude: Scalars['Float']['output'];
+  /** Finite WGS 84 longitude in the inclusive range [-180, 180]. */
+  longitude: Scalars['Float']['output'];
+  name: Scalars['String']['output'];
+};
+
 export type Money = {
   __typename?: 'Money';
   /** Non-negative amount expressed in major currency units. */
@@ -106,6 +124,8 @@ export type TripLeg = {
   departure_at: Scalars['DateTime']['output'];
   /** Canonical departure city identifier. */
   from: Scalars['String']['output'];
+  /** Departure city marker; from_city.id must equal from. */
+  from_city: City;
   /**
    * Travel duration in whole seconds, equal to arrival_at minus departure_at.
    * Does not include waiting time before or after this leg.
@@ -113,5 +133,7 @@ export type TripLeg = {
   time_in_travel: Scalars['Int']['output'];
   /** Canonical arrival city identifier. */
   to: Scalars['String']['output'];
+  /** Arrival city marker; to_city.id must equal to. */
+  to_city: City;
   transport_type: TransportType;
 };

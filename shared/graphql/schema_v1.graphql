@@ -125,6 +125,25 @@ type RoundTripOption {
     path: [TripLeg!]!
 }
 
+"""
+A city marker in WGS 84 decimal degrees, suitable for an OpenStreetMap overlay.
+Coordinates represent the city centre, not a terminal or a vehicle position.
+"""
+type City {
+    """
+    Canonical application city identifier, matching the corresponding leg endpoint.
+    This identifier is not an OpenStreetMap node ID or a globally universal ID.
+    """
+    id: ID!
+    name: String!
+
+    """Finite WGS 84 latitude in the inclusive range [-90, 90]."""
+    latitude: Float!
+
+    """Finite WGS 84 longitude in the inclusive range [-180, 180]."""
+    longitude: Float!
+}
+
 type TripLeg {
     """
     Canonical departure city identifier.
@@ -135,6 +154,12 @@ type TripLeg {
     Canonical arrival city identifier.
     """
     to: String!
+
+    """Departure city marker; from_city.id must equal from."""
+    from_city: City!
+
+    """Arrival city marker; to_city.id must equal to."""
+    to_city: City!
 
     departure_at: DateTime!
 

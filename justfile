@@ -25,6 +25,11 @@ setup:
 download-datasets *args:
     uv run --project backend --locked python -m backend.infrastructure.fixtures.download_datasets "$@"
 
+# Run the Vilnius round-trip demo with detailed action logs; accepts --seed.
+[positional-arguments]
+demo-round-trip *args:
+    uv run --project backend --locked python -m backend.presentation.cli.round_trip_demo "$@"
+
 # Download all three external fixture datasets.
 download-all-datasets: download-datasets
 
