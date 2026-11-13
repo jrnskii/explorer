@@ -252,7 +252,7 @@ class CanonicalContractsTests(unittest.TestCase):
 
         domain_values = {member.value for member in TransportType}
         graphql_values = {member.value for member in GraphQLTransportType}
-        self.assertEqual(domain_values, {"BUSSES", "PLANES", "TRAINS"})
+        self.assertEqual(domain_values, {"BUSSES", "PLANES", "TRAINS", "FERRIES"})
         self.assertEqual(domain_values, graphql_values)
         for value in graphql_values:
             with self.subTest(value=value):

@@ -38,6 +38,11 @@ download-schedules *args:
 combine-schedules *args:
     uv run --project backend --locked python -m backend.infrastructure.fixtures.combine_mobilitydatabase "$@"
 
+# Rebuild the complete static EU city graph, including city and transport weights.
+[positional-arguments]
+build-base-graph *args:
+    uv run --project backend --locked python -m backend.presentation.cli.base_graph "$@"
+
 # Generate Python models and TypeScript types from the v1 GraphQL schema.
 codegen: codegen-python codegen-typescript
 

@@ -417,3 +417,207 @@ uv run --project backend --locked python -m unittest discover -s backend/tests -
 
 `backend/src/backend/infrastructure/ignav/models.py` is generated; do not edit it manually.
 The existing GraphQL code-generation commands remain separate and unchanged.
+
+## Reference city base graph
+
+Build the offline, fare-free EU-27 city multigraph directly into a native binary
+snapshot, optimized for loading the whole graph into Python/NetworkX:
+
+```sh
+just build-base-graph
+# Equivalent command:
+uv run --project backend --locked python -m backend.presentation.cli.base_graph
+```
+
+The default output is `base_graph.pickle` under the fixture data directory. It uses
+pickle protocol 5 and directly preserves the NetworkX graph, including shared
+adjacency/attribute references, without constructing or decoding a node-link JSON
+tree. For smaller storage, use `--output PATH.pickle.zst` (Zstandard level 1).
+The uncompressed `.pickle` format is the default because full-graph loading was
+fastest in the local benchmark. These are Python caches, not a language-neutral
+interchange format or a replacement for an indexed database for selective queries.
+
+```python
+from pathlib import Path
+from backend.infrastructure.catalog.graph_snapshot import load_base_graph
+
+graph = load_base_graph()  # Default base_graph.pickle; structurally frozen.
+# graph = load_base_graph(Path("reference-data/base_graph.pickle.zst"))
+```
+
+Historical schema-3 full-snapshot benchmark (20,934 cities, 999,686 parallel connections):
+
+| Format | File size (MB) | Full graph load (s) | Peak RSS (MiB) |
+| --- | ---: | ---: | ---: |
+| Node-link JSON | 790.1 | 7.859 | 2933.8 |
+| Native pickle (default) | 463.8 | 0.820 | 1745.1 |
+| Zstandard pickle | 58.7 | 1.465 | 1746.6 |
+
+Measured once per format in separate Python 3.14 processes using the repository
+loaders and a warm filesystem cache. Timing includes graph reconstruction; peak
+RSS includes the interpreter and imports. These are local measurements, not
+portable latency guarantees. Both binary files preserve the same snapshot ID,
+weights, parallel edges, isolated cities, and unknown travel times.
+
+Snapshot files are trusted local caches. The loader restricts reconstructed
+pickle globals to the NetworkX types used here, validates the container/version,
+and rejects incompatible NetworkX versions. Do not load externally supplied pickle
+files; regenerate caches after changing NetworkX. Graph attributes remain mutable
+and should be treated as read-only. No new dependencies are required; compression
+uses Python 3.14's standard library.
+
+Migrate an existing JSON snapshot once, without rebuilding source data:
+
+```sh
+uv run --project backend --locked python -m backend.presentation.cli.base_graph \
+  --from-json backend/src/backend/infrastructure/fixtures/data/base_graph.json \
+  --output backend/src/backend/infrastructure/fixtures/data/base_graph.legacy.pickle
+# Optional smaller output:
+uv run --project backend --locked python -m backend.presentation.cli.base_graph \
+  --from-json backend/src/backend/infrastructure/fixtures/data/base_graph.json \
+  --output backend/src/backend/infrastructure/fixtures/data/base_graph.legacy.pickle.zst
+```
+
+JSON migration preserves the original file and its existing semantic schema; it
+does not enrich older graphs with new fields. Rebuild from sources with
+`just build-base-graph` to get all current fields, even when the old snapshot is
+lost. The current graph semantic schema is version 4; the binary storage container
+has its own version 1. Writes use a same-directory staging file and atomic
+replacement so interrupted/failed writes
+do not truncate an existing snapshot. Stdout is a small JSON summary containing
+`output`, `nodes`, `edges`, and `snapshot_id`; progress and errors go to stderr.
+Missing/invalid inputs exit with status 1; invalid CLI options exit with status 2.
+
+The default source inputs remain `cities/Cities.csv`, `airline_routes.json`,
+`train-stations/train_stations_europe.csv`, and
+`mobilitydatabase/schedules.staging.duckdb` under the fixture data directory.
+Override them with `--cities`, `--routes`, `--stations`, and `--schedules`.
+`--air-only` imports just the city CSV and airport routes. `--from-json` cannot
+be combined with source import options. For Python source imports:
+
+```python
+from backend.infrastructure.catalog.base_graph import build_base_graph
+from backend.infrastructure.catalog.graph_snapshot import save_base_graph
+
+graph = build_base_graph()
+save_base_graph(graph)
+```
+
+All city rows in the 27 EU member countries are included, even without connections.
+Station catalog rows explicitly marked `is_city` supplement missing city names.
+This is coverage of the available snapshots, not a claim that every real EU
+settlement is catalogued. The scope uses source country labels, including any
+outlying locations assigned those countries; it is not a territorial boundary
+polygon. Python callers can select a custom `countries` frozenset. Station ISO
+code translation currently covers EU-27 only.
+
+Cities are **nodes**; transport connections are edges. Every city node has two
+filterable weight attributes, listed in graph metadata as `node_weight_attributes`:
+
+| Attribute | Type | Meaning |
+| --- | --- | --- |
+| `population` | nonnegative integer or `None` | Source population from `Cities.csv`; unknown for station-only cities without a matched population record. |
+| `attractiveness` | number | Defaults to `1` for every city, including isolated and station-only cities. This is a neutral default, not a measured tourism score. |
+
+Zero population is preserved and differs from an unknown population. Graph
+metadata includes `default_attractiveness=1` and `cities_without_population`.
+City weights are separate from the edge `weight_attributes` (`distance_km` and
+`travel_time_minutes`), and survive both binary snapshot formats.
+
+```python
+selected = [
+    city_id
+    for city_id, city in graph.nodes(data=True)
+    if city["population"] is not None
+    and city["population"] >= 100_000
+    and city["attractiveness"] >= 1
+]
+filtered_graph = graph.subgraph(selected)  # Retains parallel routes between selected cities.
+```
+
+The source builder applies the attractiveness default after all city sources have
+been imported. A fresh `just build-base-graph` reconstructs the complete EU graph
+with city identities, source populations, default attractiveness, terminal
+associations, both transport weights and their provenance, diagnostics, and source
+checksums. It does not read or depend on any pre-existing graph snapshot. Use
+`just build-base-graph --output PATH.pickle.zst` for a compressed full rebuild.
+
+City IDs hash country, name and coordinates and survive row reordering. Airports
+map only to unique normalized city/country names, or explicit reviewed
+`airport_city_overrides={iata: city_id}`. Station terminals use explicit catalog
+parent-city associations when available, otherwise the nearest city in their
+country within 10 km. GTFS stops use the nearest in-scope city within 10 km;
+GTFS does not supply a stop country, so this geographic association can cross
+country borders. Tied nearest matches and invalid coordinates remain unmapped.
+These heuristic associations are labeled and are not verified terminal catchments.
+
+The directed `MultiDiGraph` preserves separate airport/carrier connections and
+separate GTFS feed/route connections for each city pair. GTFS base and extended
+rail, coach/bus and water transport types produce `TRAINS`, `BUSSES`, and `FERRIES`
+edges alongside `PLANES`. Each trip is ordered by numeric stop sequence; only
+adjacent mapped stops in different cities establish a connection. Unmapped stops
+and ambiguous duplicate sequences do not create shortcuts. Trips with invalid
+sequence numbers are excluded. Duplicate services collapse into static route
+connectivity, and no reverse service is invented. The station list alone does
+not establish rail connections.
+
+Edges now have two independent numeric weight attributes:
+
+| Attribute | Unit | Meaning |
+| --- | --- | --- |
+| `distance_km` | kilometres | Great-circle distance between city centres. |
+| `travel_time_minutes` | minutes | Minimum valid reference/scheduled ride duration for that connection; null when unknown. |
+
+Parallel edges retain separate transport modes, carriers, and GTFS routes. The
+snapshot schema is version 4 and `weight_attributes` lists both attributes.
+Air edges use the source route's `min` field, documented as flight minutes in the
+[airline-route-data contract](https://github.com/Jonty/airline-route-data#readme).
+The reference duration applies to the airport pair; it is not carrier-specific
+schedule availability. Repeated listings use the minimum valid duration.
+
+Rail, bus, and ferry times use the minimum nonnegative destination-arrival minus
+origin-departure duration across consecutive stops mapped to different cities,
+within each feed/route/direction. This is the ride between the last stop in the
+origin city and the first stop in the next city, not city-centre access time.
+`travel_time_basis` identifies `airline_route_reference_minutes`,
+`gtfs_min_scheduled_stop_pair`, or `unknown`; `travel_time_samples` counts valid
+source observations, not calendar-weighted service frequency. No speed-based
+duration estimates are fabricated. Missing/invalid times remain null without
+removing the connection; valid zero durations are preserved.
+
+GTFS time parsing preserves hours beyond 24 and uses service-day offsets in the
+agency time zone, rather than converting stops' wall-clock times or assuming
+that midnight resets the trip. A missing arrival/departure may use the other
+field at that same stop, as allowed by the
+[GTFS stop-times contract](https://gtfs.org/documentation/schedule/reference/#stop_timestxt).
+Malformed values, overflow, and negative leg durations are excluded from duration
+aggregation. Source times may themselves be interpolated. Calendars and dates
+are not evaluated, so these values do not assert availability on any date.
+
+To route by time, select `travel_time_minutes` as the weight and exclude edges
+where it is null. Do not substitute a default numeric weight for unknown times.
+Independent minima across edges need not belong to compatible trips. Static path
+sums exclude waiting, transfers, check-in, boarding, and terminal access; they are
+not door-to-door or time-feasible itinerary durations. `distance_km` remains
+straight-line geography rather than road/track length. Graph metadata reports
+`connections_without_travel_time` and `travel_time_includes_waiting=false`.
+
+There are no fares, currencies, departure/arrival timestamps, or service dates in
+the export. Raw GTFS clock times are used only to derive static duration weights.
+The available `airlines_flights_data.csv` contains Indian fare observations and is
+not an EU route source. Edge provenance uses `data_source` so it survives node-link
+serialization, which reserves `source` for the origin node ID.
+
+GTFS extraction runs one feed at a time against a read-only DuckDB connection,
+using SQL aggregation and batched result reads instead of loading all stop times
+into Python. The staging database may be incomplete; only its committed feed
+snapshots are imported. Do not run extraction concurrently with a writer. Metadata
+includes feed count, source checksums (GTFS uses the ordered source archive hashes),
+static weight attributes, mapping counters/issues, terminals, isolated cities,
+and connections without reverse adjacency. Snapshot IDs include all selected
+source fingerprints and the EU/custom scope.
+
+These are unverified reference connections, not time-feasible itineraries or
+current availability. `live_search_eligible` is false. Publication dates and rights
+have not been verified. Graph structure is frozen; attribute dictionaries remain
+mutable and should be treated as read-only. Binary reloads are structurally frozen; legacy node-link JSON reloads are mutable by default.

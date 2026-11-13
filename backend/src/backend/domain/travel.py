@@ -7,3 +7,4 @@ class TransportType(StrEnum):
     BUSSES = "BUSSES"
     PLANES = "PLANES"
     TRAINS = "TRAINS"
+    FERRIES = "FERRIES"
