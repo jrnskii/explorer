@@ -51,7 +51,8 @@
 ## Shared contracts and generated code
 
 - `shared/graphql/schema_v1.graphql` is the source of truth for the shared GraphQL contract. Ignav models derive from `docs/api_references/ignav/openapi.json`.
-- Do not hand-edit files under `backend/src/backend/generated/`, `frontend/generated/`, or other explicitly generated outputs. Change their inputs or generator configuration and regenerate them.
+- Do not hand-edit `backend/src/backend/infrastructure/graphql/models.py`, `backend/src/backend/infrastructure/ignav/models.py`, files under `frontend/generated/`, or other explicitly generated outputs. Change their inputs or generator configuration and regenerate them.
+- Use canonical backend modules under `domain/`, `application/`, `infrastructure/`, and `presentation/`. Do not reintroduce retired flat modules or the `mock/`, `graphutils/`, `models/`, and `generated/` compatibility packages; see `backend/README.md` for migration paths.
 - For schema changes, update affected consumers, validation, serialization, and contract tests together. Documentation-only schema constraints still need application-level enforcement.
 - Preserve configured scalar mappings, decimal precision, and serialized field aliases. Test round trips across the relevant boundaries.
 - Check generated changes for unintended drift and confirm generation is deterministic when modifying the generation workflow.
