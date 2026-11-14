@@ -121,3 +121,21 @@ test("renders estimate-only results without invented times or booking actions", 
   expect(screen.queryByText(/\d\d:\d\d/)).not.toBeInTheDocument()
   expect(screen.getAllByText(/Planned dates:/)).toHaveLength(10)
 })
+
+describe("TripOpportunities featured option", () => {
+  test("highlights only the featured option with its label", () => {
+    const { container } = render(
+      <TripOpportunities options={SAMPLE_OPTIONS} featuredIndex={2} featuredLabel="Best match" />
+    )
+    const featured = container.querySelectorAll('[data-featured="true"]')
+    expect(featured).toHaveLength(1)
+    expect(within(featured[0] as HTMLElement).getByText("Best match")).toBeInTheDocument()
+    expect(screen.getAllByText("Best match")).toHaveLength(1)
+  })
+
+  test("keeps the Cheapest badge when nothing is featured", () => {
+    const { container } = render(<TripOpportunities options={SAMPLE_OPTIONS} />)
+    expect(container.querySelector('[data-featured="true"]')).toBeNull()
+    expect(screen.getByText("Cheapest")).toBeInTheDocument()
+  })
+})

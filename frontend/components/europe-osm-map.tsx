@@ -78,21 +78,25 @@ function Overlay({
   map,
   fit,
   inset = 0,
+  zoomMs = HIGHLIGHT_ZOOM_MS,
   onFlight,
   children,
 }: {
   map: LeafletMapInstance
   fit: readonly LonLat[]
   inset?: number
+  zoomMs?: number
   onFlight?: (flying: boolean) => void
   children: (api: OverlayApi) => ReactNode
 }) {
   const onFlightRef = useRef(onFlight)
   const insetRef = useRef(inset)
+  const zoomMsRef = useRef(zoomMs)
   useEffect(() => {
     onFlightRef.current = onFlight
     insetRef.current = inset
-  }, [onFlight, inset])
+    zoomMsRef.current = zoomMs
+  }, [onFlight, inset, zoomMs])
   // Space kept clear around the fitted points: at least PADDING pixels, or
   // `inset` of the map size on each side.
   const paddingFor = useCallback(() => {
@@ -164,7 +168,7 @@ function Overlay({
     animating.current = true
     onFlightRef.current?.(true)
     map.on({ move: bump, zoom: bump, moveend: done })
-    map.flyToBounds(bounds, { ...options, duration: HIGHLIGHT_ZOOM_MS / 1000 })
+    map.flyToBounds(bounds, { ...options, duration: zoomMsRef.current / 1000 })
     return () => {
       done()
       if (map.getPane("mapPane")) map.stop()
@@ -217,6 +221,8 @@ export default function EuropeOsmMap(props: MapProps) {
 type MapProps = {
   /** Fraction of the map size kept empty on each side of `fit` (default: a small fixed margin). */
   fitInset?: number
+  /** Duration of the zoom onto a new `fit`, in ms (default: the cheapest-path zoom). */
+  zoomMs?: number
   /** Called with true when a zoom animation starts and false when it ends. */
   onFlight?: (flying: boolean) => void
   /** Show satellite imagery instead of plain country outlines. */
@@ -230,7 +236,7 @@ type MapProps = {
 // react-leaflet's `MapContainer`: under React Strict Mode its effect cleanup
 // removes the map but never recreates it, so layers added afterwards throw
 // (`this.getPane().appendChild`). Here every effect run owns a fresh map.
-function LeafletMap({ fit, fitInset, satellite = true, className, onFlight, children }: MapProps) {
+function LeafletMap({ fit, fitInset, zoomMs, satellite = true, className, onFlight, children }: MapProps) {
   const [node, setNode] = useState<HTMLDivElement | null>(null)
   const [map, setMap] = useState<LeafletMapInstance | null>(null)
 
@@ -287,7 +293,7 @@ function LeafletMap({ fit, fitInset, satellite = true, className, onFlight, chil
   return (
     <div ref={setNode} className={className}>
       {map && (
-        <Overlay map={map} fit={fit} inset={fitInset} onFlight={onFlight}>
+        <Overlay map={map} fit={fit} inset={fitInset} zoomMs={zoomMs} onFlight={onFlight}>
           {children}
         </Overlay>
       )}

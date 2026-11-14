@@ -131,10 +131,13 @@ export function TripOpportunity({
   priceScope = "adult",
   priceStatus,
   overBudget = false,
+  featuredLabel,
   className,
 }: {
   option: RoundTripOption
   rank?: number
+  /** Highlights the card as the best opportunity, with this badge text. */
+  featuredLabel?: string
   /** Prices are per adult; the total shown is multiplied by this. */
   travelers?: number
   priceScope?: "adult" | "party"
@@ -148,13 +151,20 @@ export function TripOpportunity({
   const saved = trips.some((t) => t.id === tripId(option))
 
   return (
-    <Card className={cn("gap-0 py-0", className)}>
+    <Card
+      data-featured={featuredLabel ? "true" : undefined}
+      className={cn("gap-0 py-0", className)}
+    >
       <Collapsible>
         <div className={CARD_GRID}>
           <div className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
             <div className="flex items-center gap-2">
               <div className="flex flex-1 flex-wrap items-center gap-1.5 text-sm">
-                {rank === 1 && <Badge>Cheapest</Badge>}
+                {featuredLabel ? (
+                  <Badge>{featuredLabel}</Badge>
+                ) : (
+                  rank === 1 && <Badge>Cheapest</Badge>
+                )}
                 <span className="text-muted-foreground">
                   Round trip · {formatDuration(travelSeconds)} travelling
                 </span>
@@ -321,6 +331,8 @@ export function TripOpportunities({
   priceScope = "adult",
   priceStatuses,
   overBudgetOptions,
+  featuredIndex,
+  featuredLabel = "Best match",
   className,
 }: {
   options: RoundTripOption[]
@@ -330,6 +342,9 @@ export function TripOpportunities({
   priceScope?: "adult" | "party"
   priceStatuses?: string[]
   overBudgetOptions?: boolean[]
+  /** Index of the option to highlight as the best one. */
+  featuredIndex?: number
+  featuredLabel?: string
   className?: string
 }) {
   const rows = [
@@ -340,6 +355,7 @@ export function TripOpportunities({
         rank={ranks?.[index] ?? index + 1}
         travelers={travelers}
         priceScope={priceScope}
+        featuredLabel={index === featuredIndex ? featuredLabel : undefined}
         priceStatus={priceStatuses?.[index]}
         overBudget={overBudgetOptions?.[index]}
         className={LIST_CARD}

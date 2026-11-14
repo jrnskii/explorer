@@ -7,9 +7,6 @@ import { resolvePlaces, isInMapRegion, type Departure } from "@/lib/europe-place
 import {
   ROUTE_FADE_MS,
   HOLD_MS,
-  HIGHLIGHT_FADE_MS,
-  HIGHLIGHT_LEG_MS,
-  HIGHLIGHT_ZOOM_MS,
   TRAIL,
   arcPath,
   planCascade,
@@ -98,7 +95,6 @@ const BEST_GLOW_LAYERS = [
   { width: 9, opacity: 0.2 },
   { width: 5, opacity: 0.38 },
 ] as const
-const BEST_LEG_MS = HIGHLIGHT_LEG_MS
 // Share of the screen kept empty around the path, so the zoom stays loose.
 const PATH_INSET = 0.22
 
@@ -150,6 +146,8 @@ export function EuropeLoader({
   highlight?: readonly LonLat[]
   /** City names for `highlight`, same order; written next to each stop. */
   highlightLabels?: readonly string[]
+  /** Fixed length of the whole highlight showcase (zoom, draw, fade); default: derived from the path. */
+  highlightDurationMs?: number
   /** Called with true while the map zooms between regions, false once it settles. */
   onFlight?: (flying: boolean) => void
   label?: string
@@ -181,6 +179,7 @@ function EuropeLoaderRoutes({
   destinations,
   highlight,
   highlightLabels,
+  highlightDurationMs,
   onFlight,
   label = "Searching routes",
   className,
@@ -191,6 +190,7 @@ function EuropeLoaderRoutes({
   destinations?: readonly { lon: number; lat: number }[]
   highlight?: readonly LonLat[]
   highlightLabels?: readonly string[]
+  highlightDurationMs?: number
   onFlight?: (flying: boolean) => void
   label?: string
   className?: string
@@ -220,10 +220,12 @@ function EuropeLoaderRoutes({
     highlight.some((p) => p[0] !== highlight[0][0] || p[1] !== highlight[0][1])
   const fit = showPath ? highlight : points
 
+  const timeline = highlightTimeline(highlight ?? [], highlightDurationMs)
+
   // Once drawn, the whole path (lines, dots, names) fades away slowly.
   const fadeVars = {
-    "--out-delay": `${highlightTimeline(highlight ?? []).fadeStartMs}ms`,
-    "--out-ms": `${HIGHLIGHT_FADE_MS}ms`,
+    "--out-delay": `${timeline.fadeStartMs}ms`,
+    "--out-ms": `${timeline.fadeMs}ms`,
   } as CSSProperties
 
   // A single round is on screen at a time, so repeated searches never overlap.
@@ -271,7 +273,7 @@ function EuropeLoaderRoutes({
       )}
     >
       <style>{CSS}</style>
-      <EuropeOsmMap fit={fit} fitInset={showPath ? PATH_INSET : undefined} satellite={satellite} onFlight={onFlight} className="absolute inset-0 z-0 bg-white! dark:bg-background!">
+      <EuropeOsmMap fit={fit} fitInset={showPath ? PATH_INSET : undefined} zoomMs={timeline.zoomMs} satellite={satellite} onFlight={onFlight} className="absolute inset-0 z-0 bg-white! dark:bg-background!">
         {({ project, width, height }) => {
           const drawn = round?.routes.map((r) => {
             const to = project(r.to)
@@ -364,8 +366,8 @@ function EuropeLoaderRoutes({
                     if (from[0] === to[0] && from[1] === to[1]) return []
                     const d = arcPath(project(from), project(to))
                     const vars = {
-                      "--delay": `${HIGHLIGHT_ZOOM_MS + i * BEST_LEG_MS}ms`,
-                      "--draw": `${BEST_LEG_MS}ms`,
+                      "--delay": `${timeline.zoomMs + i * timeline.legMs}ms`,
+                      "--draw": `${timeline.legMs}ms`,
                     } as CSSProperties
                     return [
                       <g key={i} style={vars}>
@@ -406,7 +408,7 @@ function EuropeLoaderRoutes({
                         className="eu-best-stop"
                         style={
                           {
-                            "--delay": `${HIGHLIGHT_ZOOM_MS + index * BEST_LEG_MS}ms`,
+                            "--delay": `${timeline.zoomMs + index * timeline.legMs}ms`,
                           } as CSSProperties
                         }
                       >

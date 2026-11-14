@@ -165,10 +165,23 @@ export function planCascade(
  * Timeline of the cheapest path: the map zooms, each hop draws in turn, then
  * the whole path fades.
  */
-export function highlightTimeline(points: readonly LonLat[]) {
+export function highlightTimeline(
+  points: readonly LonLat[],
+  totalMs?: number
+) {
   const hops = Math.max(0, points.length - 1)
-  const fadeStartMs = HIGHLIGHT_ZOOM_MS + hops * HIGHLIGHT_LEG_MS
-  return { fadeStartMs, endMs: fadeStartMs + HIGHLIGHT_FADE_MS }
+  const naturalMs =
+    HIGHLIGHT_ZOOM_MS + hops * HIGHLIGHT_LEG_MS + HIGHLIGHT_FADE_MS
+  // A fixed total scales every phase proportionally.
+  const scale =
+    totalMs !== undefined && Number.isFinite(totalMs) && totalMs > 0
+      ? totalMs / naturalMs
+      : 1
+  const zoomMs = HIGHLIGHT_ZOOM_MS * scale
+  const legMs = HIGHLIGHT_LEG_MS * scale
+  const fadeMs = HIGHLIGHT_FADE_MS * scale
+  const fadeStartMs = zoomMs + hops * legMs
+  return { zoomMs, legMs, fadeMs, fadeStartMs, endMs: fadeStartMs + fadeMs }
 }
 
 export function roundDurationMs(routes: readonly PlannedRoute[]) {
