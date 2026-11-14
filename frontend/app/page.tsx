@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import type { City } from "@/components/city-picker"
 import { SiteHeader } from "@/components/site-header"
@@ -9,9 +9,13 @@ import {
   TripInputs,
   type TripInputsValue,
 } from "@/components/trip-inputs"
+import {
+  TripOpportunities,
+} from "@/components/trip-opportunities"
+import type { RoundTripOption } from "@/generated/schema_v1"
+import { priceSamples } from "@/lib/sample-forecast"
 import { CloudOverlay } from "@/components/cloud-overlay"
 import { EuropeLoader } from "@/components/europe-loader"
-import { TripOpportunities } from "@/components/trip-opportunities"
 import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 import { cn } from "@/lib/utils"
 
@@ -50,8 +54,6 @@ const EDGE_MASK =
 const VIGNETTE =
   "radial-gradient(ellipse at center, transparent 50%, color-mix(in srgb, var(--vignette) 85%, transparent) 100%)"
 
-const MOCK_SEARCH_DELAY_MS = 10000
-
 const DEFAULT_START_OFFSET_DAYS = 2
 const DEFAULT_DURATION = "3"
 const DEFAULT_BUDGET = "200"
@@ -68,14 +70,32 @@ const FLIGHT_CLOUD_DENSITY = 0.75
 export default function Home() {
   const [trip, setTrip] = useState<TripInputsValue>(EMPTY_TRIP_INPUTS)
   const [searchedTravelers, setSearchedTravelers] = useState(1)
-  const [status, setStatus] = useState<"idle" | "loading" | "done">("idle")
-  // Which search (by number) the results have been revealed for.
-  const [searchNumber, setSearchNumber] = useState(0)
-  const [revealedSearch, setRevealedSearch] = useState(0)
-  // True while the map zooms. The full-screen backdrop blur is the costliest
-  // layer to repaint over moving imagery, so it fades out for the flight.
-  const [flying, setFlying] = useState(false)
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
+  const [options, setOptions] = useState<RoundTripOption[]>([])
+  const [error, setError] = useState("")
+  const pending = useRef<AbortController | null>(null)
 
+  useEffect(() => () => pending.current?.abort(), [])
+
+  async function search(value: TripInputsValue) {
+    pending.current?.abort()
+    const controller = new AbortController()
+    pending.current = controller
+    setSearchedTravelers(value.travelers)
+    setStatus("loading")
+    setError("")
+    setOptions([])
+    try {
+      const estimates = await priceSamples(SAMPLE_OPTIONS, value, controller.signal)
+      if (controller.signal.aborted) return
+      setOptions(estimates)
+      setStatus("done")
+    } catch (failure) {
+      if (controller.signal.aborted) return
+      setError(failure instanceof Error ? failure.message : "Price estimates are unavailable.")
+      setStatus("error")
+    }
+  }
   // Departure auto-complete covers all European cities (lazy-loaded dataset).
   const [popular, setPopular] = useState<City[]>()
   useEffect(() => {
@@ -109,12 +129,6 @@ export default function Home() {
     return () => controller.abort()
   }, [])
 
-  // Mock search: resolves with sample data after a fixed delay.
-  useEffect(() => {
-    if (status !== "loading") return
-    const timer = setTimeout(() => setStatus("done"), MOCK_SEARCH_DELAY_MS)
-    return () => clearTimeout(timer)
-  }, [status])
 
   // Glowing path of the cheapest option, once its stops are placed on the map.
   const options = SAMPLE_OPTIONS
@@ -210,17 +224,14 @@ export default function Home() {
           onSearchDeparture={searchDeparture}
           departureSuggestions={popular}
           loading={status === "loading"}
-          onSubmit={(v) => {
-            setSearchedTravelers(v.travelers)
-            setSearchNumber((n) => n + 1)
-            setStatus("loading")
-          }}
+          onSubmit={search}
         />
-
-        {status === "done" && !showcasing && (
+        {status === "error" && <p role="alert">{error}</p>}
+        {status === "done" && (
           <TripOpportunities
             options={options}
             travelers={searchedTravelers}
+            priceScope="party"
           />
         )}
         </main>

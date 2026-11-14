@@ -5,7 +5,7 @@ import {
   Bus,
   CalendarIcon,
   ChevronDown,
-  // Info,
+  CircleHelp,
   Plane,
   Search,
   // Ship,
@@ -55,11 +55,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-// import {
-//   Tooltip,
-//   TooltipContent,
-//   TooltipTrigger,
-// } from "@/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { TransportType } from "@/generated/schema_v1"
 import { cn } from "@/lib/utils"
@@ -519,19 +515,31 @@ export function TripInputs({
           </Combobox>
         </SearchSegment>
 
-        <Button
-          type="submit"
-          size="lg"
-          disabled={!isTripInputsComplete(value) || loading}
-          className="m-1.5 h-14 w-[calc(100%-0.75rem)] self-center rounded-full border-0 px-10 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 text-lg font-bold lg:h-auto lg:w-auto lg:shrink-0 lg:self-stretch [&_svg:not([class*='size-'])]:size-5"
-        >
-          {!loading && <Search aria-hidden />}
-          {loading
-            ? "Searching…"
-            : requiresSignUp
-              ? "Sign up to continue"
-              : "Search"}
-        </Button>
+        <TooltipProvider>
+          <Tooltip disabled={value.modes.length > 0}>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="submit"
+                  size="lg"
+                  focusableWhenDisabled={value.modes.length === 0}
+                  disabled={!isTripInputsComplete(value) || loading}
+                  className="m-1.5 h-14 w-[calc(100%-0.75rem)] self-center rounded-full border-0 px-10 text-lg font-bold aria-disabled:opacity-50 lg:h-auto lg:w-auto lg:shrink-0 lg:self-stretch [&_svg:not([class*='size-'])]:size-5"
+                />
+              }
+            >
+              {!loading && <Search aria-hidden />}
+              {loading
+                ? "Searching…"
+                : requiresSignUp
+                  ? "Sign up to continue"
+                  : "Search"}
+            </TooltipTrigger>
+            <TooltipContent>
+              Choose at least one way to travel.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </SearchBar>
 
 
@@ -618,6 +626,25 @@ export function TripInputs({
               </ComboboxList>
             </ComboboxContent>
           </Combobox>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="rounded-full text-white"
+                    aria-label="About sample itineraries"
+                  />
+                }
+              >
+                <CircleHelp aria-hidden />
+              </TooltipTrigger>
+              <TooltipContent className="text-sm leading-relaxed">
+                Sample itineraries with estimated fares. Schedules are illustrative, not bookable. Routes without supported pricing are omitted.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {/* <Field
@@ -652,7 +679,6 @@ export function TripInputs({
           </Tooltip>
         </Field> */}
       </div>
-
 
       {/* Advanced search section (temporarily disabled)
       <Collapsible className="flex flex-col gap-4">

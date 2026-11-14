@@ -48,6 +48,7 @@ export function MyTrips({ className }: { className?: string }) {
               <TripOpportunity
                 option={trip.option}
                 travelers={trip.travelers}
+                priceScope={trip.priceScope}
                 className="w-full"
               />
             </li>

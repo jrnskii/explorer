@@ -88,3 +88,17 @@ describe("save button on search results", () => {
     expect(getSavedTrips()).toHaveLength(0)
   })
 })
+
+
+test("preserves party estimates when saving and reopening a trip", async () => {
+  const user = userEvent.setup()
+  const option = { ...SAMPLE_OPTIONS[0], total_price: { amount: "20.00", currency: "EUR" } }
+  const result = render(<TripOpportunities options={[option]} travelers={2} priceScope="party" />)
+  await user.click(screen.getByRole("button", { name: "Save to My trips" }))
+  expect(getSavedTrips()[0].priceScope).toBe("party")
+  result.unmount()
+  render(<MyTrips />)
+  expect(screen.getByText("€20")).toBeInTheDocument()
+  expect(screen.getByText("estimated total for 2 travellers")).toBeInTheDocument()
+  expect(screen.queryByText("€40")).toBeNull()
+})

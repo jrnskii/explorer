@@ -127,12 +127,14 @@ export function TripOpportunity({
   option,
   rank,
   travelers = 1,
+  priceScope = "adult",
   className,
 }: {
   option: RoundTripOption
   rank?: number
   /** Prices are per adult; the total shown is multiplied by this. */
   travelers?: number
+  priceScope?: "adult" | "party"
   className?: string
 }) {
   const { home, travelSeconds, totalSeconds, departAt, returnAt } =
@@ -158,7 +160,7 @@ export function TripOpportunity({
                 aria-pressed={saved}
                 aria-label={saved ? "Remove from My trips" : "Save to My trips"}
                 title={saved ? "Remove from My trips" : "Save to My trips"}
-                onClick={() => toggle(option, travelers)}
+                onClick={() => toggle(option, travelers, priceScope)}
               >
                 <Bookmark
                   aria-hidden
@@ -214,17 +216,19 @@ export function TripOpportunity({
           <div className="flex flex-col justify-between gap-3 border-t p-4 sm:border-t-0 sm:border-l sm:p-5">
             <div>
               <div className="text-xs text-muted-foreground">
-                {travelers === 1
+                {priceScope === "party"
+                  ? `estimated total for ${travelers} ${travelers === 1 ? "traveller" : "travellers"}`
+                  : travelers === 1
                   ? "Price per adult"
                   : `Total for ${travelers} travellers`}
               </div>
               <div className="text-2xl font-semibold">
                 {formatPrice(
-                  String(Number(option.total_price.amount) * travelers),
+                  priceScope === "party" ? option.total_price.amount : String(Number(option.total_price.amount) * travelers),
                   option.total_price.currency
                 )}
               </div>
-              {travelers > 1 && (
+              {priceScope === "adult" && travelers > 1 && (
                 <div className="text-xs text-muted-foreground">
                   {formatPrice(
                     option.total_price.amount,
@@ -303,10 +307,12 @@ export function TripOpportunity({
 export function TripOpportunities({
   options,
   travelers = 1,
+  priceScope = "adult",
   className,
 }: {
   options: RoundTripOption[]
   travelers?: number
+  priceScope?: "adult" | "party"
   className?: string
 }) {
   return (
@@ -326,6 +332,7 @@ export function TripOpportunities({
               option={option}
               rank={i + 1}
               travelers={travelers}
+            priceScope={priceScope}
               className={LIST_CARD}
             />
           </li>

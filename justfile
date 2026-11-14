@@ -25,8 +25,56 @@ setup:
 download-datasets *args:
     uv run --project backend --locked python -m backend.infrastructure.fixtures.download_datasets "$@"
 
+# Manual live Omio probe: just test-omio --date YYYY-MM-DD (uses API credits).
+[positional-arguments]
+test-omio *args:
+    uv run --project backend --locked python -m backend.presentation.cli.test_omio "$@"
+
+# Run the Vilnius round-trip demo with detailed action logs; accepts --seed.
+[positional-arguments]
+demo-round-trip *args:
+    uv run --project backend --locked python -m backend.presentation.cli.round_trip_demo "$@"
+
 # Download all three external fixture datasets.
 download-all-datasets: download-datasets
+
+# Download latest GTFS schedules for all European Mobility Database feeds.
+[positional-arguments]
+download-schedules *args:
+    uv run --project backend --locked python -m backend.infrastructure.fixtures.download_mobilitydatabase "$@"
+
+# Extract relevant rail/bus/ferry GTFS scheduling data into local DuckDB.
+[positional-arguments]
+combine-schedules *args:
+    uv run --project backend --locked python -m backend.infrastructure.fixtures.combine_mobilitydatabase "$@"
+
+# Extract local Schengen fares and GTFS fare rules into a separate DuckDB file.
+[positional-arguments]
+extract-pricing *args:
+    uv run --project backend --locked python -m backend.infrastructure.fixtures.extract_pricing "$@"
+
+# Fit independent flight/train/bus/ferry price models from extracted local data.
+[positional-arguments]
+train-pricing *args:
+    uv run --project backend --locked python -m backend.infrastructure.pricing.train "$@"
+
+# Rebuild the complete static EU city graph, including city and transport weights.
+[positional-arguments]
+build-base-graph *args:
+    uv run --project backend --locked python -m backend.presentation.cli.base_graph "$@"
+
+# Serve the base graph notebook as a standalone Voilà website.
+serve-base-graph port="8866":
+    uv run --project backend --locked voila \
+        --no-browser \
+        --Voila.ip=127.0.0.1 \
+        --Voila.port={{ port }} \
+        backend/notebooks/01_eu_graph_visualization.ipynb
+
+# Update the local development flight-route fixture from airline-route-data.
+# The upstream generated JSON is large; this task downloads it without displaying it.
+update-flight-data:
+    curl --fail --location --output backend/src/backend/infrastructure/fixtures/data/airlines/airline_routes.json https://raw.githubusercontent.com/Jonty/airline-route-data/master/airline_routes.json
 
 # Generate Python models and TypeScript types from the v1 GraphQL schema.
 codegen: codegen-python codegen-typescript

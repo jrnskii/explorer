@@ -11,6 +11,7 @@ export type SavedTrip = {
   option: RoundTripOption
   /** Traveller count of the search the trip was saved from. */
   travelers: number
+  priceScope?: "adult" | "party"
   /** ISO timestamp of when the trip was saved. */
   savedAt: string
 }
@@ -83,12 +84,12 @@ function write(trips: SavedTrip[]) {
   listeners.forEach((l) => l())
 }
 
-export function saveTrip(option: RoundTripOption, travelers = 1) {
+export function saveTrip(option: RoundTripOption, travelers = 1, priceScope: "adult" | "party" = "adult") {
   const id = tripId(option)
   const current = getSavedTrips()
   if (current.some((t) => t.id === id)) return
   write([
-    { id, option, travelers, savedAt: new Date().toISOString() },
+    { id, option, travelers, priceScope, savedAt: new Date().toISOString() },
     ...current,
   ])
 }
@@ -113,10 +114,10 @@ function subscribe(listener: () => void) {
 
 export function useSavedTrips() {
   const trips = useSyncExternalStore(subscribe, getSavedTrips, () => EMPTY)
-  const toggle = useCallback((option: RoundTripOption, travelers = 1) => {
+  const toggle = useCallback((option: RoundTripOption, travelers = 1, priceScope: "adult" | "party" = "adult") => {
     const id = tripId(option)
     if (getSavedTrips().some((t) => t.id === id)) removeTrip(id)
-    else saveTrip(option, travelers)
+    else saveTrip(option, travelers, priceScope)
   }, [])
   return { trips, toggle, remove: removeTrip }
 }

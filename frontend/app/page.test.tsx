@@ -49,10 +49,12 @@ vi.mock("@/lib/europe-cities", () => ({
   popularEuropeCities: () => Promise.resolve([]),
   searchEuropeCities: () => Promise.resolve([]),
 }))
-const { detectDepartureCity } = vi.hoisted(() => ({
+const { detectDepartureCity, priceSamples } = vi.hoisted(() => ({
+  priceSamples: vi.fn(() => new Promise<never[]>(() => {})),
   detectDepartureCity: vi.fn(() => Promise.resolve(null as unknown)),
 }))
 vi.mock("@/lib/ip-origin", () => ({ detectDepartureCity }))
+vi.mock("@/lib/sample-forecast", () => ({ priceSamples }))
 vi.mock("@/components/trip-inputs", () => ({
   EMPTY_TRIP_INPUTS: { travelers: 3 },
   TripInputs: ({ onSubmit, value }: { onSubmit: (v: { travelers: number }) => void; value: { travelers: number; departure?: { name: string } | null; date?: Date; duration?: string; budget?: string } }) => (
@@ -100,6 +102,7 @@ describe("Home search", () => {
   test("shows everything while idle", () => {
     render(<Home />)
     const content = screen.getByTestId("page-content")
+    expect(screen.queryByText(/Sample itineraries with estimated fares/)).not.toBeInTheDocument()
     expect(content).not.toHaveAttribute("inert")
     expect(content).not.toHaveClass("opacity-0")
   })
@@ -157,6 +160,8 @@ describe("Home search", () => {
   })
 
   test("hides everything but the map while searching, then restores the page with results", async () => {
+    let finish: ((value: never[]) => void) | undefined
+    priceSamples.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
     render(<Home />)
     fireEvent.click(screen.getByText("Search"))
     const content = screen.getByTestId("page-content")
@@ -165,9 +170,7 @@ describe("Home search", () => {
     expect(screen.getByTestId("loader")).toHaveAttribute("data-loading", "true")
     expect(screen.queryByText("Results")).toBeNull()
 
-    await act(async () => void vi.advanceTimersByTime(10000))
-    // The white path is shown alone first; results follow once it has drawn and faded (3 s).
-    await act(async () => void vi.advanceTimersByTime(SHOWCASE_MS))
+    await act(async () => { finish?.([]) })
     expect(content).not.toHaveAttribute("inert")
     expect(content).not.toHaveClass("opacity-0")
     expect(screen.getByText("Results")).toBeInTheDocument()

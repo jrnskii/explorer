@@ -25,6 +25,18 @@ An exact, non-negative decimal encoded as a JSON string, such as \\"149.95\\".
 """
 
 
+type Float = float
+"""
+The `Float` scalar type represents signed double-precision fractional values as specified by [IEEE 754](https://en.wikipedia.org/wiki/IEEE_floating_point).
+"""
+
+
+type ID = str
+"""
+The `ID` scalar type represents a unique identifier, often used to refetch an object or as key for a cache. The ID type appears in a JSON response as a String; however, it is not intended to be human-readable. When expected as an input type, any string (such as `"4"`) or integer (such as `4`) input value will be accepted as an ID.
+"""
+
+
 type Int = int
 """
 The `Int` scalar type represents non-fractional signed whole numeric values. Int can represent values between -(2^31) and 2^31 - 1.
@@ -48,6 +60,38 @@ class TransportType(StrEnum):
     TRAINS = 'TRAINS'
 
 
+class City(BaseModel):
+    """
+    A city marker in WGS 84 decimal degrees, suitable for an OpenStreetMap overlay.
+    Coordinates represent the city centre, not a terminal or a vehicle position.
+    """
+
+    id: ID = Field(
+        ...,
+        description='Canonical application city identifier, matching the corresponding leg endpoint.\nThis identifier is not an OpenStreetMap node ID or a globally universal ID.',
+    )
+    latitude: Float = Field(
+        ..., description='Finite WGS 84 latitude in the inclusive range [-90, 90].'
+    )
+    longitude: Float = Field(
+        ..., description='Finite WGS 84 longitude in the inclusive range [-180, 180].'
+    )
+    name: String
+
+
+class CityStay(BaseModel):
+    attractiveness: Float
+    city: String
+    target_time: Float = Field(
+        ...,
+        description='Approximate target seconds, proportional to attractiveness after travel time.\nBased on target return capped by maximum duration, excluding initial home waiting.',
+    )
+    time_spent: Float = Field(
+        ...,
+        description='Actual elapsed seconds between arrival and next departure, summed over revisits.\nIncludes internal connections; does not guarantee usable sightseeing time.',
+    )
+
+
 class Money(BaseModel):
     amount: Decimal = Field(
         ..., description='Non-negative amount expressed in major currency units.'
@@ -66,12 +110,29 @@ class TripLeg(BaseModel):
     from_: String = Field(
         ..., alias='from', description='Canonical departure city identifier.'
     )
+    from_city: City = Field(
+        ..., description='Departure city marker; from_city.id must equal from.'
+    )
     time_in_travel: Int = Field(
         ...,
         description='Travel duration in whole seconds, equal to arrival_at minus departure_at.\nDoes not include waiting time before or after this leg.',
     )
     to: String = Field(..., description='Canonical arrival city identifier.')
+    to_city: City = Field(
+        ..., description='Arrival city marker; to_city.id must equal to.'
+    )
     transport_type: TransportType
+
+
+class CityAttractivenessInput(BaseModel):
+    city: String = Field(
+        ...,
+        description='Canonical city identifier, distinct and neither home nor excluded.',
+    )
+    weight: Float = Field(
+        ...,
+        description='Finite strictly positive relative weight. Unspecified cities use 1.',
+    )
 
 
 class MoneyInput(BaseModel):
@@ -84,6 +145,11 @@ class MoneyInput(BaseModel):
 
 
 class RoundTripSearchInput(BaseModel):
+    city_attractiveness: list[CityAttractivenessInput] = Field(
+        [],
+        description='Soft attractiveness weights; not verified tourism ratings.',
+        validate_default=True,
+    )
     departure_city: String = Field(
         ...,
         description='Non-empty canonical city identifier; also the final destination.',
@@ -104,9 +170,17 @@ class RoundTripSearchInput(BaseModel):
         ...,
         description='Maximum total itinerary price, inclusive of taxes and mandatory fees.\nThis is an absolute budget, not a percentage or an amount above a baseline.',
     )
+    fuzzy_search: Boolean = Field(
+        False,
+        description='Prefer approximate attractiveness-weighted stays instead of price-first ranking.\nNo exact per-city stay is required; infeasible schedules are never relaxed.',
+    )
     mandatory_cities: list[String] = Field(
         [],
         description='Distinct canonical city identifiers that must each be visited at least once.\nTheir order does not constrain the itinerary. Must not contain departure_city.',
+    )
+    max_trip_duration: Int | None = Field(
+        None,
+        description='Hard elapsed limit in seconds from departure_date, including initial waiting.\nPositive when supplied; intersected with the return window.',
     )
     time_tolerance: Int = Field(
         ...,
@@ -118,9 +192,14 @@ class RoundTripSearchInput(BaseModel):
 
 
 class RoundTripOption(BaseModel):
+    city_stays: list[CityStay]
     path: list[TripLeg] = Field(
         ...,
         description='Non-empty list of legs in chronological order. The first leg starts and\nthe last leg ends in departure_city. Each leg starts where the previous\nleg ended, no earlier than its arrival time. All legs use allowed modes.',
+    )
+    stay_fit: Float | None = Field(
+        None,
+        description='Fuzzy similarity in [0, 1], higher is better; null for price-first searches.\nOne minus summed absolute stay error divided by actual plus target stay time.\nZero when no time is available or spent in cities.',
     )
     total_price: Money = Field(
         ...,

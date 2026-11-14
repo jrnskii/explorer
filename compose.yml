@@ -1,0 +1,43 @@
+services:
+  frontend:
+    image: oven/bun:1.4.4
+    working_dir: /app/frontend
+    init: true
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
+      - frontend_next:/app/frontend/.next
+    command:
+      - sh
+      - -ec
+      - |
+        bun install --frozen-lockfile
+        exec bun --bun next dev --hostname 0.0.0.0 --port 3000
+
+  # The backend currently exposes offline CLI tools, not an HTTP API.
+  backend:
+    image: ghcr.io/astral-sh/uv:python3.14-bookworm
+    profiles: [tools]
+    working_dir: /app
+    init: true
+    environment:
+      UV_PROJECT_ENVIRONMENT: /opt/backend-venv
+      UV_LINK_MODE: copy
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./backend:/app/backend
+      - backend_venv:/opt/backend-venv
+      - uv_cache:/root/.cache/uv
+    entrypoint: [uv, run, --project, backend, --locked, --no-dev]
+    command: [python, -m, backend.presentation.cli.round_trip_demo]
+
+volumes:
+  frontend_node_modules:
+  frontend_next:
+  backend_venv:
+  uv_cache:

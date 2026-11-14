@@ -1,5 +1,38 @@
 # Round Trip
 
+## Run with Docker Compose
+
+With Docker Engine and the Compose plugin (or Docker Desktop) installed, run:
+
+```sh
+docker compose up
+```
+
+Open <http://localhost:3000>. This runs the frontend development server with
+hot reload and locked Bun dependencies. Set `FRONTEND_PORT=3001` to use another
+host port. The UI currently displays synthetic sample results; the backend has
+CLI entry points rather than an HTTP API.
+
+Run the offline backend demo separately (JSON on stdout, logs on stderr):
+
+```sh
+docker compose run --rm backend
+# Override the default demo command with another backend CLI:
+docker compose run --rm backend python -m backend.presentation.cli.round_trip --help
+```
+
+The backend uses Python 3.14 and locked uv runtime dependencies. Its `tools`
+profile keeps it out of the default `up`; explicitly targeting it with `run`
+enables it automatically. No provider credentials are required for the demo.
+Initial startup requires network access to pull images and install dependencies;
+the frontend also fetches Google Fonts. Source directories are mounted for local
+development, with container dependencies and Next.js output in named volumes to
+keep them separate from host installations. Host `.env` credentials are not
+injected into either service.
+
+Stop services with `docker compose down`. Add `--volumes` to also remove the
+container dependency and build caches.
+
 ## GraphQL code generation
 
 The API source of truth is `shared/graphql/schema_v1.graphql`.
