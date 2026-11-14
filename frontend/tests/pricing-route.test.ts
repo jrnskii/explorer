@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vitest"
 import { POST } from "@/app/api/pricing/route"
 
 const request = (body: string) => new Request("http://localhost/api/pricing", { method: "POST", body })

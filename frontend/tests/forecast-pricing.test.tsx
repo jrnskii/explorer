@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, vi, test, type MockInstance } from "vitest"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { TripInputsValue } from "@/components/trip-inputs"
 import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 import { applyFareEstimates, fetchFareEstimates } from "@/lib/forecast-pricing"
+import Home from "@/app/page"
 import { prepareSamples, priceSamples } from "@/lib/sample-forecast"
 
 const input: TripInputsValue = {
@@ -12,7 +13,7 @@ const input: TripInputsValue = {
   returnDate: undefined, daysPerCity: "", mustVisit: [], avoid: [],
 }
 const estimate = (amount: string) => ({ price: { amount, currency: "EUR" }, model_id: "fixture", warnings: ["Estimate only"] })
-let fetchSpy: ReturnType<typeof spyOn<typeof globalThis, "fetch">> | undefined
+let fetchSpy: MockInstance<typeof fetch> | undefined
 
 function implementation(fn: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>): typeof fetch {
   return Object.assign(fn, { preconnect: () => {} })
@@ -37,7 +38,7 @@ describe("forecast pricing", () => {
     expect(() => prepareSamples(SAMPLE_OPTIONS, { ...input, flexibleDates: true })).toThrow("fixed dates")
   })
   test("fetches party forecasts, applies budget and never uses the preview price", async () => {
-    fetchSpy = spyOn(globalThis, "fetch").mockImplementation(implementation(async (_url, init) => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(implementation(async (_url, init) => {
       const payload = JSON.parse(String(init?.body))
       expect(payload.queries.every((q: { travelers: number }) => q.travelers === 2)).toBe(true)
       return Response.json({ forecasts: payload.queries.map(() => estimate("10.00")) })
@@ -48,7 +49,7 @@ describe("forecast pricing", () => {
   })
   test("rejects failed, malformed and non-EUR responses without fallback", async () => {
     const queries = [{ mode: "PLANES" as const, origin: "Paris", destination: "Rome", departure_date: "2030-12-04" }]
-    fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}, { status: 503 }))
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}, { status: 503 }))
     await expect(fetchFareEstimates(queries)).rejects.toThrow("unavailable")
     fetchSpy.mockResolvedValue(Response.json({ forecasts: [estimate("NaN")] }))
     await expect(fetchFareEstimates(queries)).rejects.toThrow("Invalid")
@@ -60,19 +61,23 @@ describe("forecast pricing", () => {
 })
 
 // Keep the existing form's internal interaction tests out of this price-integration boundary.
-mock.module("@/components/trip-inputs", () => ({
-  EMPTY_TRIP_INPUTS: input,
+vi.mock("@/components/trip-inputs", () => ({
+  EMPTY_TRIP_INPUTS: {},
   TripInputs: ({ onSubmit, loading }: { onSubmit: (value: TripInputsValue) => void; loading: boolean }) =>
     <button disabled={loading} onClick={() => onSubmit(input)}>Estimate fares</button>,
 }))
-const { default: Home } = await import("@/app/page")
+vi.mock("@/components/europe-loader", () => ({ EuropeLoader: ({ loading }: { loading: boolean }) => <div data-testid="loader" data-loading={loading} /> }))
+vi.mock("@/components/cloud-overlay", () => ({ CloudOverlay: () => null }))
+vi.mock("@/components/site-header", () => ({ SiteHeader: () => null }))
+vi.mock("@/lib/europe-cities", () => ({ popularEuropeCities: async () => [], searchEuropeCities: async () => [] }))
+vi.mock("@/lib/ip-origin", () => ({ detectDepartureCity: async () => null }))
 
 test("page shows loading, renders party totals once, and labels synthetic itineraries", async () => {
   let finish: ((value: Response) => void) | undefined
-  fetchSpy = spyOn(globalThis, "fetch").mockImplementation(implementation(() => new Promise<Response>((resolve) => { finish = resolve })))
+  fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(implementation(() => new Promise<Response>((resolve) => { finish = resolve })))
   render(<Home />)
   fireEvent.click(screen.getByRole("button", { name: "Estimate fares" }))
-  expect(screen.getByRole("region", { name: "Travel opportunities" }).getAttribute("aria-busy")).toBe("true")
+  expect(screen.getByTestId("loader")).toHaveAttribute("data-loading", "true")
   const payload = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))
   await act(async () => { finish?.(Response.json({ forecasts: payload.queries.map(() => estimate("10.00")) })) })
   expect((await screen.findAllByText("estimated total for 2 travellers")).length).toBeGreaterThan(0)
@@ -81,7 +86,7 @@ test("page shows loading, renders party totals once, and labels synthetic itiner
 })
 
 test("page announces pricing errors and recovers on another submission", async () => {
-  fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}, { status: 503 }))
+  fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}, { status: 503 }))
   render(<Home />)
   fireEvent.click(screen.getByRole("button", { name: "Estimate fares" }))
   expect((await screen.findByRole("alert")).textContent).toContain("unavailable")

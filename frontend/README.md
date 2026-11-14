@@ -61,6 +61,6 @@ No paid provider is called and there is no mock fallback. Browser aborts prevent
 stale results; backend processes remain bounded by the server timeout.
 
 Run `bun run --cwd frontend test` from the repository root. The minimal setup uses
-Bun's runner, React Testing Library and Happy DOM. Tests cover loading, errors,
+Vitest, React Testing Library and jsdom. Tests cover loading, errors,
 recovery, empty coverage, estimate validation, filtering, exact sums, party totals
 and API input limits.
