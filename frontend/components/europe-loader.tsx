@@ -9,7 +9,9 @@ import {
   HOLD_MS,
   TRAIL,
   arcPath,
-  planCascade,
+  planCascadeFrom,
+  arrivalMs,
+  frontierCities,
   planRound,
   highlightTimeline,
   roundDurationMs,
@@ -27,6 +29,8 @@ const EuropeOsmMap = dynamic(() => import("@/components/europe-osm-map"), {
 const FADE_MS = 350
 // Pause between two rounds of routes while the search is still running.
 const ROUND_PAUSE_MS = 200
+// Each wave after the first branches less, so the endless cascade stays light.
+const CONTINUATION_BRANCHING = [2, 1] as const
 const MAX_REAL_DESTINATIONS = 8
 
 // Moving light, built from stacked dashes sharing one head: a trail that fades
@@ -116,7 +120,70 @@ function uniqueStops(points: readonly LonLat[], names: readonly string[]) {
   return stops
 }
 
+// Searching lines are drawn this many times thicker than the base widths below.
+const LINE_THICKNESS = 1.8
+const MIN_LINE_OPACITY = 0.3
+
+/**
+ * Pseudo-random brightness of a line in [MIN_LINE_OPACITY, 1], derived from its
+ * key: lines look randomly dimmed, yet the same line always gets the same value
+ * (no Math.random, so renders and tests stay deterministic).
+ */
+export function lineOpacity(key: string) {
+  let h = 2166136261
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  const unit = (h >>> 0) / 4294967295
+  return Number((MIN_LINE_OPACITY + unit * (1 - MIN_LINE_OPACITY)).toFixed(2))
+}
+
 type Round = { id: number; routes: PlannedRoute[] }
+
+/** Id of the round whose lines converge on the highlighted path; it is not faded as a finished search. */
+const CONVERGE_ID = -1
+// How many recent line origins are remembered for the convergence.
+const RECENT_ORIGINS = 16
+// Share of the zoom the converging lines take to draw; the rest is the hold before they fade.
+const CONVERGE_DRAW_SHARE = 0.7
+const CONVERGE_STAGGER_SHARE = 0.25
+
+/**
+ * Re-targets lines onto the stops of the highlighted path, handing the stops
+ * out in turn so each receives the same number of lines (a line never ends
+ * where it starts). Timed to finish as the map zoom does.
+ */
+export function planConvergence(
+  origins: readonly LonLat[],
+  stops: readonly LonLat[],
+  zoomMs: number
+): PlannedRoute[] {
+  const same = (a: LonLat, b: LonLat) => a[0] === b[0] && a[1] === b[1]
+  const targets = stops.filter((s, i) => stops.findIndex((o) => same(o, s)) === i)
+  if (targets.length === 0) return []
+  const beamMs = zoomMs * CONVERGE_DRAW_SHARE
+  const stagger = origins.length > 1 ? (zoomMs * CONVERGE_STAGGER_SHARE) / (origins.length - 1) : 0
+  const routes: PlannedRoute[] = []
+  let turn = 0
+  origins.forEach((from, i) => {
+    for (let k = 0; k < targets.length; k++) {
+      const to = targets[(turn + k) % targets.length]
+      if (same(from, to)) continue
+      turn = (turn + k + 1) % targets.length
+      routes.push({
+        key: `converge:${i}>${to[0]},${to[1]}`,
+        from,
+        to,
+        startMs: i * stagger,
+        beamMs,
+        drawMs: beamMs / (1 + TRAIL),
+      })
+      return
+    }
+  })
+  return routes
+}
 
 export function EuropeLoader({
   departure,
@@ -228,39 +295,95 @@ function EuropeLoaderRoutes({
     "--out-ms": `${timeline.fadeMs}ms`,
   } as CSSProperties
 
-  // A single round is on screen at a time, so repeated searches never overlap.
-  const [round, setRound] = useState<Round | null>(null)
+  // Waves on screen. Decorative routes are endless: each wave continues from the
+  // cities the previous one reached, so nothing restarts from the origin. Real
+  // destinations are drawn one round at a time.
+  const [rounds, setRounds] = useState<Round[]>([])
   const roundCounter = useRef(0)
+  // Origins of the most recent lines: they are the ones that converge on the path.
+  const recentOrigins = useRef<LonLat[]>([])
+  const [converge, setConverge] = useState<Round | null>(null)
+  const highlightKey = showPath && highlight ? highlight.map((p) => p.join(",")).join(">") : ""
+  const zoomMs = timeline.zoomMs
 
   useEffect(() => {
     // Search finished: let what is on screen fade out, then drop it.
     if (!loading) {
-      const t = setTimeout(() => setRound(null), FADE_MS)
+      const t = setTimeout(() => setRounds([]), FADE_MS)
       return () => clearTimeout(t)
     }
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    let timer: ReturnType<typeof setTimeout>
+    const timers = new Set<ReturnType<typeof setTimeout>>()
+    const later = (fn: () => void, ms: number) => {
+      const t = setTimeout(() => {
+        timers.delete(t)
+        fn()
+      }, ms)
+      timers.add(t)
+    }
+    let frontier: number[] = []
+
+    const add = (id: number, routes: PlannedRoute[]) => {
+      recentOrigins.current = [
+        ...recentOrigins.current,
+        ...routes.map((r) => r.from),
+      ].slice(-RECENT_ORIGINS)
+      setRounds((current) => [...current, { id, routes }])
+    }
+    const remove = (id: number) =>
+      setRounds((current) => current.filter((r) => r.id !== id))
 
     const run = () => {
       const id = roundCounter.current++
-      // Real destinations are drawn as given; only decorative routes cascade on.
+      if (realDestinations.length > 0) {
+        // Real destinations are drawn as given, then repeated.
+        const routes = planRound(points[start], realDestinations)
+        add(id, routes)
+        if (reduced) return
+        later(() => {
+          remove(id)
+          later(run, ROUND_PAUSE_MS)
+        }, roundDurationMs(routes))
+        return
+      }
       const routes =
-        realDestinations.length > 0
-          ? planRound(points[start], realDestinations)
-          : planCascade(points, start, id)
-      setRound({ id, routes })
+        frontier.length === 0
+          ? planCascadeFrom(points, [start], id)
+          : planCascadeFrom(points, frontier, id, CONTINUATION_BRANCHING)
+      frontier = frontierCities(routes)
+      add(id, routes)
       // Reduced motion: one static set of routes, no cycling.
       if (reduced) return
-      timer = setTimeout(() => {
-        setRound(null)
-        timer = setTimeout(run, ROUND_PAUSE_MS)
-      }, roundDurationMs(routes))
+      later(() => remove(id), roundDurationMs(routes))
+      // The next wave leaves as soon as this one's beams have arrived.
+      later(run, frontier.length === 0 ? roundDurationMs(routes) : arrivalMs(routes))
     }
 
-    timer = setTimeout(run, 0)
-    return () => clearTimeout(timer)
+    // A new search starts from a clean map, never stacked on leftovers.
+    later(() => {
+      setRounds([])
+      run()
+    }, 0)
+    return () => timers.forEach(clearTimeout)
   }, [loading, points, start, realDestinations])
+
+  // While the map zooms onto the highlighted path, the searching lines end up at its cities.
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const stops = highlightKey
+      ? highlightKey.split(">").map((p) => p.split(",").map(Number) as unknown as LonLat)
+      : []
+    const t = setTimeout(() => {
+      const origins = recentOrigins.current
+      const routes =
+        stops.length === 0 || reduced || origins.length === 0
+          ? []
+          : planConvergence(origins, stops, zoomMs)
+      setConverge(routes.length > 0 ? { id: CONVERGE_ID, routes } : null)
+    }, 0)
+    return () => clearTimeout(t)
+  }, [highlightKey, zoomMs])
 
   return (
     <div
@@ -275,13 +398,16 @@ function EuropeLoaderRoutes({
       <style>{CSS}</style>
       <EuropeOsmMap fit={fit} fitInset={showPath ? PATH_INSET : undefined} zoomMs={timeline.zoomMs} satellite={satellite} onFlight={onFlight} className="absolute inset-0 z-0 bg-white! dark:bg-background!">
         {({ project, width, height }) => {
-          const drawn = round?.routes.map((r) => {
-            const to = project(r.to)
-            return { route: r, to, d: arcPath(project(r.from), to) }
-          })
+          const drawn = (converge ? [...rounds, converge] : rounds).map((round) => ({
+            round,
+            routes: round.routes.map((r) => {
+              const to = project(r.to)
+              return { route: r, to, d: arcPath(project(r.from), to) }
+            }),
+          }))
           // The origin ripple only belongs to the animation: shown while searching
           // and while the last round fades out, hidden otherwise.
-          const active = loading || round !== null
+          const active = loading || rounds.length > 0
           return (
             <svg
               width={width}
@@ -289,14 +415,14 @@ function EuropeLoaderRoutes({
               className="absolute inset-0 text-primary"
               aria-hidden
             >
-              {round && drawn && (
+              {drawn.map(({ round, routes: shown }) => (
                 <g
                   key={round.id}
-                  className={loading ? undefined : "eu-fade-out"}
+                  className={loading || round.id === CONVERGE_ID ? undefined : "eu-fade-out"}
                   fill="none"
                   strokeLinejoin="round"
                 >
-                  {drawn.map(({ route: r, d }) => {
+                  {shown.map(({ route: r, d }) => {
                     const vars = {
                       "--delay": `${r.startMs}ms`,
                       "--draw": `${r.drawMs}ms`,
@@ -305,13 +431,14 @@ function EuropeLoaderRoutes({
                     } as CSSProperties
                     return (
                       <g key={r.key} className="eu-life" style={vars}>
+                        <g data-testid="search-line" opacity={lineOpacity(`${round.id}|${r.key}`)}>
                         {GLOW_LAYERS.map((l) => (
                           <path
                             key={l.width}
                             d={d}
                             pathLength={1}
                             className="eu-line eu-glow"
-                            strokeWidth={l.width}
+                            strokeWidth={l.width * LINE_THICKNESS}
                             strokeOpacity={l.opacity}
                             strokeLinecap="round"
                           />
@@ -320,7 +447,7 @@ function EuropeLoaderRoutes({
                           d={d}
                           pathLength={1}
                           className="eu-line eu-draw"
-                          strokeWidth={1.25}
+                          strokeWidth={1.25 * LINE_THICKNESS}
                           strokeLinecap="round"
                         />
                         {TRAIL_LAYERS.map((l) => (
@@ -329,7 +456,7 @@ function EuropeLoaderRoutes({
                             d={d}
                             pathLength={1}
                             className="eu-beam eu-ruby"
-                            strokeWidth={l.width}
+                            strokeWidth={l.width * LINE_THICKNESS}
                             strokeOpacity={l.opacity}
                             style={{ "--len": l.len } as CSSProperties}
                           />
@@ -340,16 +467,17 @@ function EuropeLoaderRoutes({
                             d={d}
                             pathLength={1}
                             className={`eu-beam ${l.className}`}
-                            strokeWidth={l.width}
+                            strokeWidth={l.width * LINE_THICKNESS}
                             strokeOpacity={l.opacity}
                             style={{ "--len": l.len } as CSSProperties}
                           />
                         ))}
+                        </g>
                       </g>
                     )
                   })}
                 </g>
-              )}
+              ))}
 
               {showPath && highlight && (
                 <g
@@ -446,12 +574,12 @@ function EuropeLoaderRoutes({
               )}
 
               {/* Destination dots light up as the beam arrives. */}
-              {round && drawn && (
+              {drawn.map(({ round, routes: shown }) => (
                 <g
                   key={`arrive-${round.id}`}
-                  className={loading ? undefined : "eu-fade-out"}
+                  className={loading || round.id === CONVERGE_ID ? undefined : "eu-fade-out"}
                 >
-                  {drawn.map(({ route: r, to }) => (
+                  {shown.map(({ route: r, to }) => (
                     <circle
                       key={r.key}
                       cx={to[0]}
@@ -464,7 +592,7 @@ function EuropeLoaderRoutes({
                     />
                   ))}
                 </g>
-              )}
+              ))}
             </svg>
           )
         }}

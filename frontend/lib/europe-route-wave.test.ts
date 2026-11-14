@@ -16,6 +16,9 @@ import {
   arcPath,
   pickDestinations,
   planCascade,
+  planCascadeFrom,
+  frontierCities,
+  arrivalMs,
   planRound,
   roundDurationMs,
   type LonLat,
@@ -169,5 +172,32 @@ describe("highlightTimeline with a fixed total", () => {
   test("ignores an invalid total", () => {
     assert.equal(highlightTimeline(stops, 0).endMs, highlightTimeline(stops).endMs)
     assert.equal(highlightTimeline(stops, Number.NaN).endMs, highlightTimeline(stops).endMs)
+  })
+})
+
+describe("endless cascade", () => {
+  test("a wave continues from the previous wave's final cities, not the origin", () => {
+    const first = planCascade(points, madrid)
+    const frontier = frontierCities(first)
+    assert.ok(frontier.length > 0 && frontier.length <= 3)
+    assert.ok(!frontier.includes(madrid))
+    const next = planCascadeFrom(points, frontier, 1, [2, 1])
+    const departures = new Set(next.filter((r) => r.startMs < frontier.length * STAGGER_MS).map((r) => r.fromIndex))
+    assert.deepEqual([...departures].sort(), [...frontier].sort())
+    assert.ok(next.every((r) => r.fromIndex !== madrid || frontier.includes(madrid)))
+  })
+
+  test("frontier is capped, distinct and deterministic", () => {
+    const routes = planCascade(points, madrid)
+    const a = frontierCities(routes, 2)
+    assert.equal(a.length, 2)
+    assert.equal(new Set(a).size, 2)
+    assert.deepEqual(frontierCities(routes, 2), a)
+  })
+
+  test("arrivalMs is when the last beam arrives", () => {
+    const routes = planCascade(points, madrid)
+    assert.equal(arrivalMs(routes), Math.max(...routes.map((r) => r.startMs + r.drawMs)))
+    assert.equal(arrivalMs([]), 0)
   })
 })
