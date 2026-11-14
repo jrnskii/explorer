@@ -1,6 +1,12 @@
 export type PricingPlan = {
   id: "free" | "credits-5" | "credits-12"
   name: string
+  /** Number of credits included (monthly for the free plan, one-time otherwise). */
+  credits: number
+  /** Price in euro cents; 0 for the free plan. */
+  priceCents: number
+  /** Whether credits are granted monthly or bought once. */
+  billing: "monthly" | "one-time"
   /** Display price, e.g. "€2.25". Prototype/proposed only. */
   price: string
   /** Short line under the price. */
@@ -51,10 +57,28 @@ export function formatEuroCents(cents: number): string {
   return `€${(cents / 100).toFixed(2)}`
 }
 
+/** Whole-number percentage saved per credit versus the standard €0.50 rate; 0 when there is no saving. */
+export function planSavingsPercent(plan: PricingPlan): number {
+  if (plan.priceCents <= 0 || plan.credits <= 0) return 0
+  const perCredit = plan.priceCents / plan.credits
+  return Math.max(
+    0,
+    Math.round(100 - (perCredit / CUSTOM_CREDITS.unitCents) * 100)
+  )
+}
+
+/** Credits still needed to reach the bulk discount; 0 once reached. */
+export function creditsUntilDiscount(quantity: number): number {
+  return Math.max(0, CUSTOM_CREDITS.discountFrom - clampCredits(quantity))
+}
+
 export const PRICING_PLANS: PricingPlan[] = [
   {
     id: "free",
     name: "Free",
+    credits: 2,
+    priceCents: 0,
+    billing: "monthly",
     price: "€0",
     note: "Includes 2 credits every month.",
     cta: "Get started",
@@ -63,6 +87,9 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     id: "credits-5",
     name: "5 credits",
+    credits: 5,
+    priceCents: 225,
+    billing: "one-time",
     price: "€2.25",
     note: "€0.45 per credit.",
     cta: "Buy credits",
@@ -71,6 +98,9 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     id: "credits-12",
     name: "12 credits",
+    credits: 12,
+    priceCents: 480,
+    billing: "one-time",
     price: "€4.80",
     note: "€0.40 per credit.",
     cta: "Buy credits",

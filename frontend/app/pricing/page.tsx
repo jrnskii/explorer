@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { PageBackdrop } from "@/components/page-backdrop"
 import { Pricing } from "@/components/pricing"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
@@ -13,13 +14,14 @@ export const metadata: Metadata = {
 export default function PricingPage() {
   return (
     <>
-      <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
+      <PageBackdrop />
+      <div className="relative z-10 mx-auto w-full max-w-5xl px-4 sm:px-6">
         <SiteHeader current="pricing" />
         <main className="py-6">
           <Pricing />
         </main>
       </div>
-      <SiteFooter />
+      <SiteFooter className="relative z-10" />
     </>
   )
 }

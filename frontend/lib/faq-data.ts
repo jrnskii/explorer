@@ -40,7 +40,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     category: "getting-started",
     question: "How does Explorer work?",
     answer:
-      'Choose your departure location, travel date, trip length, number of travellers and maximum transport budget. Select your preferred transport options and click "Find my trip" to discover possible journeys. You can also use Advanced Search to customize your route.',
+      'Choose your departure location, travel date, trip length, number of travellers and maximum transport budget. Select your preferred transport options and click "Search" to discover possible journeys. You can also use Advanced Search to customize your route.',
   },
   {
     id: "multiple-cities",

@@ -7,7 +7,10 @@ import {
   clampCredits,
   customTotalCents,
   formatEuroCents,
+  creditsUntilDiscount,
   hasCustomDiscount,
+  PRICING_PLANS,
+  planSavingsPercent,
 } from "@/lib/pricing-data"
 
 import { Pricing } from "./pricing"
@@ -49,6 +52,47 @@ describe("custom credit pricing logic", () => {
     expect(clampCredits(12.4)).toBe(12)
     expect(clampCredits(Number.NaN)).toBe(CUSTOM_CREDITS.default)
     expect(customTotalCents(999)).toBe(2000)
+  })
+})
+
+describe("plan information design", () => {
+  test("savings are derived from the per-credit price versus €0.50", () => {
+    const savings = Object.fromEntries(
+      PRICING_PLANS.map((p) => [p.id, planSavingsPercent(p)])
+    )
+    expect(savings).toEqual({ free: 0, "credits-5": 10, "credits-12": 20 })
+  })
+
+  test("creditsUntilDiscount counts down to 20 and stops at 0", () => {
+    expect(creditsUntilDiscount(1)).toBe(19)
+    expect(creditsUntilDiscount(19)).toBe(1)
+    expect(creditsUntilDiscount(20)).toBe(0)
+    expect(creditsUntilDiscount(50)).toBe(0)
+  })
+
+  test("cards show billing cadence and savings badges only where there is a saving", () => {
+    render(<Pricing />)
+    const free = screen.getByRole("article", { name: "Free" })
+    expect(within(free).getByText("per month")).toBeInTheDocument()
+    expect(within(free).queryByText(/Save/)).not.toBeInTheDocument()
+    const five = screen.getByRole("article", { name: "5 credits" })
+    expect(within(five).getByText("one-time")).toBeInTheDocument()
+    expect(within(five).getByText("Save 10%")).toBeInTheDocument()
+    expect(
+      within(screen.getByRole("article", { name: "12 credits" })).getByText("Save 20%")
+    ).toBeInTheDocument()
+  })
+
+  test("custom selector hints how many credits remain until the discount", async () => {
+    const user = userEvent.setup()
+    render(<Pricing />)
+    const hint = screen.getByTestId("custom-discount-hint")
+    expect(hint).toHaveTextContent("Add 10 more credits to save 20%")
+    for (let i = 0; i < 9; i++)
+      await user.click(screen.getByRole("button", { name: "Increase credits" }))
+    expect(hint).toHaveTextContent("Add 1 more credit to save 20%")
+    await user.click(screen.getByRole("button", { name: "Increase credits" }))
+    expect(hint).toHaveTextContent("20% off applied")
   })
 })
 

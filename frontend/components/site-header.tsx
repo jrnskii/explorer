@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { RegionPreferences } from "@/components/region-preferences"
-import { ThemePicker } from "@/components/theme-picker"
+
 import { cn } from "@/lib/utils"
 
 /** Placeholder entries: the routes don't exist yet. */
@@ -63,7 +63,7 @@ export function SiteHeader({
           Home
         </Link>
         <RegionPreferences />
-        <ThemePicker />
+
         {COMING_SOON.map(({ label, icon: Icon }) =>
           label === "Help" || label === "Pricing" ? (
             <Link

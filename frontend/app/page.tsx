@@ -9,9 +9,11 @@ import {
   TripInputs,
   type TripInputsValue,
 } from "@/components/trip-inputs"
+import { CloudOverlay } from "@/components/cloud-overlay"
 import { EuropeLoader } from "@/components/europe-loader"
 import { TripOpportunities } from "@/components/trip-opportunities"
 import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
+import { cn } from "@/lib/utils"
 import { popularEuropeCities, searchEuropeCities } from "@/lib/europe-cities"
 
 const CITIES: City[] = [
@@ -70,20 +72,40 @@ export default function Home() {
         label="Finding your trip"
         departure={trip.departure}
         loading={status === "loading"}
+        satellite
       />
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-[1] backdrop-blur-md"
         style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
       />
+      <CloudOverlay
+              className="fixed inset-0 z-[1] h-screen"
+              denseTop={status !== "loading"}
+            />
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-[1] [--vignette:white] dark:[--vignette:var(--background)]"
         style={{ background: VIGNETTE }}
       />
-      <div className="relative z-10 mx-auto w-full max-w-5xl px-4 sm:px-6">
+      {/* While searching only the map and its animation stay visible. The content
+          stays mounted (form state is kept, layout does not shift) but is faded out
+          and made inert so it cannot be focused or read by assistive technology. */}
+      <div
+        data-testid="page-content"
+        inert={status === "loading"}
+        className={cn(
+          "relative z-10 mx-auto w-full max-w-5xl px-4 transition-opacity duration-500 motion-reduce:transition-none sm:px-6",
+          status === "loading" && "pointer-events-none opacity-0"
+        )}
+      >
         <SiteHeader />
-        <main className="flex flex-col gap-6 py-6">
+        <main
+                  className={cn(
+                    "flex flex-col gap-6 py-6",
+                    status !== "done" && "min-h-[70svh] justify-center"
+                  )}
+                >
         <TripInputs
           value={trip}
           onChange={setTrip}

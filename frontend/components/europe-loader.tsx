@@ -1,12 +1,20 @@
 "use client"
 
-import { geoDistance, geoInterpolate } from "d3-geo"
 import dynamic from "next/dynamic"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
-import type { LonLat, Projector } from "@/components/europe-osm-map"
-import { resolvePlaces, type Departure, type Place } from "@/lib/europe-places"
-import { nextHub } from "@/lib/europe-route-walk"
+import { resolvePlaces, isInMapRegion, type Departure } from "@/lib/europe-places"
+import {
+  ROUTE_FADE_MS,
+  HOLD_MS,
+  TRAIL,
+  arcPath,
+  planCascade,
+  planRound,
+  roundDurationMs,
+  type LonLat,
+  type PlannedRoute,
+} from "@/lib/europe-route-wave"
 import { cn } from "@/lib/utils"
 
 // Leaflet touches `window`, so the Leaflet map is client-only.
@@ -14,78 +22,67 @@ const EuropeOsmMap = dynamic(() => import("@/components/europe-osm-map"), {
   ssr: false,
 })
 
-// A hop takes MIN_HOP_MS plus a share of SPAN_HOP_MS proportional to its length.
-const SPEED = 1.5
-const MIN_HOP_MS = 500 / SPEED
-const SPAN_HOP_MS = 2000 / SPEED
-// How long a finished connection takes to fade away.
-const FADE_MS = 1400
+// How long the routes take to fade when the search ends.
+const FADE_MS = 700
+// Pause between two rounds of routes while the search is still running.
+const ROUND_PAUSE_MS = 400
+const MAX_REAL_DESTINATIONS = 8
 
-type Link = { from: number; to: number; ms: number }
-// A hop: the main connection to the next hub plus connections to every other place.
-type Hop = { id: number; from: number; main: Link; links: Link[] }
+// Moving light, built from stacked dashes sharing one head: a trail that fades
+// out gradually, a faint halo (a cheap stand-in for a blur filter, which would
+// repaint every frame), a ruby head and a silver-white core.
+const TRAIL_LAYERS = [
+  { len: TRAIL, opacity: 0.1, width: 1.25 },
+  { len: TRAIL * 0.72, opacity: 0.16, width: 1.25 },
+  { len: TRAIL * 0.46, opacity: 0.26, width: 1.35 },
+  { len: TRAIL * 0.24, opacity: 0.42, width: 1.5 },
+] as const
+const HEAD_LAYERS = [
+  { len: 0.06, className: "eu-ruby", width: 3.4, opacity: 0.16 },
+  { len: 0.05, className: "eu-ruby", width: 1.7, opacity: 1 },
+  { len: 0.022, className: "eu-silver", width: 1, opacity: 1 },
+] as const
 
-type Graph = { points: [number, number][]; maxDist: number }
-
-function buildGraph(places: readonly Place[]): Graph {
-  const points = places.map((p): [number, number] => [p.lon, p.lat])
-  const maxDist = Math.max(...points.flatMap((a) => points.map((b) => geoDistance(a, b))))
-  return { points, maxDist }
-}
-
-const link = (g: Graph, from: number, to: number): Link => ({
-  from,
-  to,
-  // Constant travel speed: longer routes take longer.
-  ms: MIN_HOP_MS + (geoDistance(g.points[from], g.points[to]) / g.maxDist) * SPAN_HOP_MS,
-})
-
-// The main connection goes to the farthest place not yet visited.
-function planHop(g: Graph, id: number, from: number, visited: ReadonlySet<number>) {
-  const step = nextHub(g.points, from, visited, geoDistance)
-  const hop: Hop = {
-    id,
-    from,
-    main: link(g, from, step.next),
-    links: g.points.flatMap((_, i) =>
-      i === from || i === step.next ? [] : [link(g, from, i)]
-    ),
-  }
-  return { hop, visited: step.visited }
-}
-
-// Great-circle route sampled into a polyline in map pixel space.
-const ROUTE_STEPS = 32
-function routePath(g: Graph, { from, to }: Link, project: Projector) {
-  const along = geoInterpolate(g.points[from], g.points[to])
-  let d = ""
-  for (let k = 0; k <= ROUTE_STEPS; k++) {
-    const [x, y] = project(along(k / ROUTE_STEPS) as LonLat)
-    d += `${k ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`
-  }
-  return d
-}
+// Neon halo: wider, fainter strokes under the line. Stacked strokes instead of
+// an SVG blur filter, which would repaint every frame.
+const GLOW_LAYERS = [
+  { width: 7, opacity: 0.12 },
+  { width: 4, opacity: 0.25 },
+]
 
 const CSS = `
+.eu-root { --eu-route: #7fff00; --eu-ruby: var(--eu-route); --eu-silver: var(--eu-route) }
 @keyframes eu-draw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+@keyframes eu-beam { 0% { stroke-dashoffset: var(--len); opacity: 0 } 6% { opacity: 1 } 90% { opacity: 1 } 100% { stroke-dashoffset: calc(var(--len) - ${1 + TRAIL}); opacity: 0 } }
 @keyframes eu-fade { from { opacity: 1 } to { opacity: 0 } }
+@keyframes eu-arrive { 0% { opacity: 0; transform: scale(.7) } 20% { opacity: .95 } 100% { opacity: 0; transform: scale(3) } }
 @keyframes eu-ripple { 0% { opacity: .9; transform: scale(.4) } 100% { opacity: 0; transform: scale(4) } }
 @keyframes eu-blink { 50% { opacity: .35 } }
-.eu-edge { stroke-dasharray: 1; stroke-dashoffset: 1; animation-name: eu-draw; animation-timing-function: linear; animation-fill-mode: forwards }
+.eu-line { stroke: var(--eu-route) }
+.eu-ruby { stroke: var(--eu-ruby) }
+.eu-silver { stroke: var(--eu-silver) }
+.eu-draw, .eu-glow { stroke-dasharray: 1; stroke-dashoffset: 1; animation: eu-draw var(--draw) linear var(--delay) forwards }
+.eu-beam { stroke-linecap: butt; stroke-dasharray: var(--len) 3; stroke-dashoffset: var(--len); opacity: 0; animation: eu-beam var(--beam) linear var(--delay) forwards }
+.eu-life { animation: eu-fade ${ROUTE_FADE_MS}ms ease-in var(--fade-delay) forwards }
+.eu-arrive { fill: var(--eu-ruby); transform-box: fill-box; transform-origin: center; opacity: 0; animation: eu-arrive 900ms ease-out var(--arrive-delay) both }
 .eu-fade-out { animation: eu-fade ${FADE_MS}ms ease-in-out forwards }
 .eu-ripple { transform-box: fill-box; transform-origin: center; opacity: 0; animation: eu-ripple 2.2s ease-out infinite }
 .eu-label { animation: eu-blink 1.6s ease-in-out infinite }
 @media (prefers-reduced-motion: reduce) {
-  .eu-edge { animation: none; stroke-dashoffset: 0 }
-  .eu-fade-out, .eu-ripple, .eu-label { animation: none }
-  .eu-fade-out { opacity: 0 }
+  .eu-draw, .eu-glow { animation: none; stroke-dashoffset: 0 }
+  .eu-beam, .eu-arrive { display: none }
+  .eu-life, .eu-ripple, .eu-label { animation: none }
+  .eu-fade-out { animation: none; opacity: 0 }
   .eu-ripple { opacity: .5; transform: scale(2) }
 }
 `
 
+type Round = { id: number; routes: PlannedRoute[] }
+
 export function EuropeLoader({
   departure,
   loading = true,
+  satellite = true,
   ...props
 }: {
   /**
@@ -93,8 +90,16 @@ export function EuropeLoader({
    * coordinates inside the map is added as an extra point.
    */
   departure?: Departure | null
-  /** Animate the connections. When false the map stays visible but still. */
+  /** Animate the routes. When false the map stays visible but still. */
   loading?: boolean
+  /** Show satellite imagery (default); false shows only country outlines. */
+  satellite?: boolean
+  /**
+   * Real destinations of the search results. When omitted the animation shows
+   * decorative example routes between European capitals; they do not
+   * represent availability.
+   */
+  destinations?: readonly { lon: number; lat: number }[]
   label?: string
   className?: string
 }) {
@@ -105,65 +110,83 @@ export function EuropeLoader({
     () => resolvePlaces(name === undefined ? null : { name, lon, lat }),
     [name, lon, lat]
   )
-  // Remount so the walk restarts from a new departure or when loading toggles.
+  // Remount so the routes restart from a new departure.
   return (
-    <EuropeLoaderWalk
-      key={`${name ?? ""}|${lon}|${lat}|${loading}`}
+    <EuropeLoaderRoutes
+      key={`${name ?? ""}|${lon}|${lat}`}
       resolved={resolved}
       loading={loading}
+      satellite={satellite}
       {...props}
     />
   )
 }
 
-function EuropeLoaderWalk({
+function EuropeLoaderRoutes({
   resolved,
   loading,
+  satellite,
+  destinations,
   label = "Searching routes",
   className,
 }: {
   resolved: ReturnType<typeof resolvePlaces>
   loading: boolean
+  satellite: boolean
+  destinations?: readonly { lon: number; lat: number }[]
   label?: string
   className?: string
 }) {
   const { places, origin, start } = resolved
-  const graph = useMemo(() => buildGraph(places), [places])
-  const [first] = useState(() => planHop(graph, 0, start, new Set()))
-  // Every hop still on screen; all but the latest are fading out.
-  const [hops, setHops] = useState<Hop[]>(loading ? [first.hop] : [])
-  const current = hops[hops.length - 1]
+  const points = useMemo(
+    () => places.map((p): LonLat => [p.lon, p.lat]),
+    [places]
+  )
+  const realDestinations = useMemo(
+    () =>
+      (destinations ?? [])
+        .filter(
+          (d) =>
+            Number.isFinite(d.lon) && Number.isFinite(d.lat) && isInMapRegion(d.lon, d.lat)
+        )
+        .slice(0, MAX_REAL_DESTINATIONS)
+        .map((d): LonLat => [d.lon, d.lat]),
+    [destinations]
+  )
+
+  // A single round is on screen at a time, so repeated searches never overlap.
+  const [round, setRound] = useState<Round | null>(null)
+  const roundCounter = useRef(0)
 
   useEffect(() => {
-    if (!loading) return
-    // The walk lives in the effect so state updaters stay pure (Strict Mode).
-    const timers = new Set<ReturnType<typeof setTimeout>>()
-    const later = (fn: () => void, ms: number) => {
-      const t = setTimeout(() => {
-        timers.delete(t)
-        fn()
-      }, ms)
-      timers.add(t)
+    // Search finished: let what is on screen fade out, then drop it.
+    if (!loading) {
+      const t = setTimeout(() => setRound(null), FADE_MS)
+      return () => clearTimeout(t)
     }
 
-    let hop = first.hop
-    let visited: ReadonlySet<number> = first.visited
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    let timer: ReturnType<typeof setTimeout>
 
-    // When the main connection arrives, change direction: new connections
-    // leave the reached capital while the previous ones fade away.
-    const advance = () => {
-      const finished = hop
-      const plan = planHop(graph, finished.id + 1, finished.main.to, visited)
-      hop = plan.hop
-      visited = plan.visited
-      setHops((hs) => [...hs, plan.hop])
-      later(() => setHops((hs) => hs.filter((h) => h.id !== finished.id)), FADE_MS)
-      later(advance, plan.hop.main.ms)
+    const run = () => {
+      const id = roundCounter.current++
+      // Real destinations are drawn as given; only decorative routes cascade on.
+      const routes =
+        realDestinations.length > 0
+          ? planRound(points[start], realDestinations)
+          : planCascade(points, start, id)
+      setRound({ id, routes })
+      // Reduced motion: one static set of routes, no cycling.
+      if (reduced) return
+      timer = setTimeout(() => {
+        setRound(null)
+        timer = setTimeout(run, ROUND_PAUSE_MS)
+      }, roundDurationMs(routes))
     }
 
-    later(advance, hop.main.ms)
-    return () => timers.forEach(clearTimeout)
-  }, [graph, first, loading])
+    timer = setTimeout(run, 0)
+    return () => clearTimeout(timer)
+  }, [loading, points, start, realDestinations])
 
   return (
     <div
@@ -171,80 +194,141 @@ function EuropeLoaderWalk({
       aria-live={loading ? "polite" : undefined}
       aria-label={loading ? label : "Map of European capitals"}
       className={cn(
-        "relative isolate min-h-[28rem] w-full overflow-hidden bg-white dark:bg-background",
+        "eu-root relative isolate min-h-[28rem] w-full overflow-hidden bg-white dark:bg-background",
         className
       )}
     >
       <style>{CSS}</style>
-      <EuropeOsmMap fit={graph.points} className="absolute inset-0 z-0 bg-white! dark:bg-background!">
-        {({ project, width, height }) => (
-          <svg
-            width={width}
-            height={height}
-            className="absolute inset-0 text-primary"
-            aria-hidden
-          >
-            {hops.map((h) => (
-              <g
-                key={h.id}
-                className={h.id === current?.id ? undefined : "eu-fade-out"}
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                {h.links.map((l) => (
-                  <path
-                    key={l.to}
-                    d={routePath(graph, l, project)}
-                    pathLength={1}
-                    className="eu-edge"
-                    strokeWidth={1}
-                    strokeOpacity={0.45}
-                    style={{ animationDuration: `${l.ms}ms` }}
-                  />
-                ))}
-                <path
-                  d={routePath(graph, h.main, project)}
-                  pathLength={1}
-                  className="eu-edge"
-                  strokeWidth={2}
-                  strokeOpacity={0.95}
-                  style={{ animationDuration: `${h.main.ms}ms` }}
-                />
-              </g>
-            ))}
+      <EuropeOsmMap fit={points} satellite={satellite} className="absolute inset-0 z-0 bg-white! dark:bg-background!">
+        {({ project, width, height }) => {
+          const drawn = round?.routes.map((r) => {
+            const to = project(r.to)
+            return { route: r, to, d: arcPath(project(r.from), to) }
+          })
+          return (
+            <svg
+              width={width}
+              height={height}
+              className="absolute inset-0 text-primary"
+              aria-hidden
+            >
+              {round && drawn && (
+                <g
+                  key={round.id}
+                  className={loading ? undefined : "eu-fade-out"}
+                  fill="none"
+                  strokeLinejoin="round"
+                >
+                  {drawn.map(({ route: r, d }) => {
+                    const vars = {
+                      "--delay": `${r.startMs}ms`,
+                      "--draw": `${r.drawMs}ms`,
+                      "--beam": `${r.beamMs}ms`,
+                      "--fade-delay": `${r.startMs + r.beamMs + HOLD_MS}ms`,
+                    } as CSSProperties
+                    return (
+                      <g key={r.key} className="eu-life" style={vars}>
+                        {GLOW_LAYERS.map((l) => (
+                          <path
+                            key={l.width}
+                            d={d}
+                            pathLength={1}
+                            className="eu-line eu-glow"
+                            strokeWidth={l.width}
+                            strokeOpacity={l.opacity}
+                            strokeLinecap="round"
+                          />
+                        ))}
+                        <path
+                          d={d}
+                          pathLength={1}
+                          className="eu-line eu-draw"
+                          strokeWidth={1.25}
+                          strokeLinecap="round"
+                        />
+                        {TRAIL_LAYERS.map((l) => (
+                          <path
+                            key={l.len}
+                            d={d}
+                            pathLength={1}
+                            className="eu-beam eu-ruby"
+                            strokeWidth={l.width}
+                            strokeOpacity={l.opacity}
+                            style={{ "--len": l.len } as CSSProperties}
+                          />
+                        ))}
+                        {HEAD_LAYERS.map((l) => (
+                          <path
+                            key={`${l.len}`}
+                            d={d}
+                            pathLength={1}
+                            className={`eu-beam ${l.className}`}
+                            strokeWidth={l.width}
+                            strokeOpacity={l.opacity}
+                            style={{ "--len": l.len } as CSSProperties}
+                          />
+                        ))}
+                      </g>
+                    )
+                  })}
+                </g>
+              )}
 
-            {origin !== null && (
-              <g fill="none" stroke="currentColor" strokeWidth={1.5}>
-                {[0, 1.1].map((delay) => (
-                  <circle
-                    key={delay}
-                    cx={project(graph.points[origin])[0]}
-                    cy={project(graph.points[origin])[1]}
-                    r={7}
-                    className="eu-ripple"
-                    style={{ animationDelay: `${delay}s` }}
-                  />
-                ))}
-              </g>
-            )}
+              {origin !== null && (
+                <g fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  {[0, 1.1].map((delay) => {
+                    const [cx, cy] = project(points[origin])
+                    return (
+                      <circle
+                        key={delay}
+                        cx={cx}
+                        cy={cy}
+                        r={7}
+                        className="eu-ripple"
+                        style={{ animationDelay: `${delay}s` }}
+                      />
+                    )
+                  })}
+                </g>
+              )}
 
-            <g className="stroke-background" strokeWidth={1.5}>
-              {places.map((place, i) => {
-                const [cx, cy] = project(graph.points[i])
-                return (
-                  <g key={place.name}>
-                    <title>
-                      {place.country ? `${place.name}, ${place.country}` : place.name}
-                    </title>
-                    <circle cx={cx} cy={cy} r={3.5} fill="currentColor" />
-                  </g>
-                )
-              })}
-            </g>
-          </svg>
-        )}
+              <g className="stroke-background" strokeWidth={1.5}>
+                {places.map((place, i) => {
+                  const [cx, cy] = project(points[i])
+                  return (
+                    <g key={place.name}>
+                      <title>
+                        {place.country ? `${place.name}, ${place.country}` : place.name}
+                      </title>
+                      <circle cx={cx} cy={cy} r={3.5} fill="currentColor" />
+                    </g>
+                  )
+                })}
+              </g>
+
+              {/* Destination dots light up as the beam arrives. */}
+              {round && drawn && (
+                <g
+                  key={`arrive-${round.id}`}
+                  className={loading ? undefined : "eu-fade-out"}
+                >
+                  {drawn.map(({ route: r, to }) => (
+                    <circle
+                      key={r.key}
+                      cx={to[0]}
+                      cy={to[1]}
+                      r={4}
+                      className="eu-arrive"
+                      style={
+                        { "--arrive-delay": `${r.startMs + r.drawMs}ms` } as CSSProperties
+                      }
+                    />
+                  ))}
+                </g>
+              )}
+            </svg>
+          )
+        }}
       </EuropeOsmMap>
       {loading && (
         <p className="eu-label absolute inset-x-0 bottom-6 z-[600] mx-auto w-fit rounded-full bg-background/80 px-4 py-1.5 font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground backdrop-blur">

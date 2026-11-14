@@ -2,13 +2,13 @@
 
 import * as React from "react"
 import {
-  ArrowRight,
   Bus,
   CalendarIcon,
   ChevronDown,
-  Info,
+  // Info,
   Plane,
-  Ship,
+  Search,
+  // Ship,
   SlidersHorizontal,
   TrainFront,
   X,
@@ -21,10 +21,10 @@ import {
   SearchBar,
   SearchSegment,
 } from "@/components/search-bar"
-import { TravelerPicker } from "@/components/traveler-picker"
+// import { TravelerPicker } from "@/components/traveler-picker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
+// import { Checkbox } from "@/components/ui/checkbox"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Card,
@@ -55,11 +55,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+// import {
+//   Tooltip,
+//   TooltipContent,
+//   TooltipTrigger,
+// } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { TransportType } from "@/generated/schema_v1"
 import { cn } from "@/lib/utils"
@@ -96,7 +96,7 @@ export const EMPTY_TRIP_INPUTS: TripInputsValue = {
   duration: "",
   flexibleDates: false,
   travelers: 1,
-  modes: ["PLANES", "TRAINS", "BUSSES", "FERRIES"],
+  modes: ["PLANES", "TRAINS", "BUSSES" /* , "FERRIES" */],
   numberOfCities: "",
   returnDate: undefined,
   daysPerCity: "",
@@ -112,7 +112,7 @@ const MODE_OPTIONS: {
   { value: "PLANES", label: "Flight", Icon: Plane },
   { value: "TRAINS", label: "Train", Icon: TrainFront },
   { value: "BUSSES", label: "Bus", Icon: Bus },
-  { value: "FERRIES", label: "Ferry", Icon: Ship },
+  // { value: "FERRIES", label: "Ferry", Icon: Ship },
 ]
 
 type DurationOption = { value: string; label: string }
@@ -126,6 +126,14 @@ const rangeOption = (from: number, to: number): DurationOption => ({
   value: `${from}-${to}`,
   label: `${from}-${to} days`,
 })
+
+/** Max digits in the budget field (up to 9999). */
+const MAX_BUDGET_DIGITS = 4
+
+/** Budget suggestions in EUR: 50 to 300 in steps of 50. */
+const BUDGET_SUGGESTIONS = Array.from({ length: 6 }, (_, i) =>
+  String((i + 1) * 50)
+)
 
 /** Picking this clears the field so a number of days can be typed. */
 const CUSTOM_DURATION: DurationOption = {
@@ -399,8 +407,12 @@ export function TripInputs({
       }}
       className={cn("flex flex-col gap-4", className)}
     >
-      <SearchBar>
-        <SearchSegment label="Departure" htmlFor={`${id}-departure`}>
+      <SearchBar className="divide-y-0 rounded-3xl lg:divide-x-0 lg:rounded-full">
+        <SearchSegment
+                  label="Departure"
+                  htmlFor={`${id}-departure`}
+                  className="px-6 py-5 lg:pl-9"
+                >
           <CityPicker
             bare
             id={`${id}-departure`}
@@ -414,7 +426,11 @@ export function TripInputs({
           />
         </SearchSegment>
 
-        <SearchSegment label="When" htmlFor={`${id}-date`}>
+        <SearchSegment
+                  label="When"
+                  htmlFor={`${id}-date`}
+                  className="px-6 py-5"
+                >
           <Popover
             open={dateOpen}
             onOpenChange={(open) => {
@@ -453,7 +469,11 @@ export function TripInputs({
           </Popover>
         </SearchSegment>
 
-        <SearchSegment label="Trip length" htmlFor={`${id}-duration`}>
+        <SearchSegment
+                  label="Trip length"
+                  htmlFor={`${id}-duration`}
+                  className="px-6 py-5"
+                >
           <Combobox
             items={durationItems(durationQuery, selectedDuration)}
             filter={null}
@@ -499,44 +519,24 @@ export function TripInputs({
           </Combobox>
         </SearchSegment>
 
-        <SearchSegment label="Travellers" htmlFor={`${id}-travelers`}>
-          <TravelerPicker
-            id={`${id}-travelers`}
-            value={value.travelers}
-            onChange={(n) => set("travelers", n)}
-          />
-        </SearchSegment>
-
-        <SearchSegment label="Max budget" htmlFor={`${id}-budget`}>
-          <InputGroup className={SEARCH_CONTROL}>
-            <InputGroupAddon className="pl-0">
-              <InputGroupText className="text-base font-semibold text-foreground">
-                €
-              </InputGroupText>
-            </InputGroupAddon>
-            <InputGroupInput
-              id={`${id}-budget`}
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="Amount"
-              value={value.budget}
-              onChange={(e) =>
-                set(
-                  "budget",
-                  e.target.value
-                    .replace(/\D/g, "")
-                    .replace(/^0+/, "")
-                    .slice(0, 7)
-                )
-              }
-            />
-          </InputGroup>
-        </SearchSegment>
+        <Button
+          type="submit"
+          size="lg"
+          disabled={!isTripInputsComplete(value) || loading}
+          className="m-1.5 h-14 w-[calc(100%-0.75rem)] self-center rounded-full border-0 px-10 text-lg font-bold lg:h-auto lg:w-auto lg:shrink-0 lg:self-stretch [&_svg:not([class*='size-'])]:size-5"
+        >
+          {!loading && <Search aria-hidden />}
+          {loading
+            ? "Searching…"
+            : requiresSignUp
+              ? "Sign up to continue"
+              : "Search"}
+        </Button>
       </SearchBar>
 
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div className="flex flex-wrap items-center gap-2">
+
+      <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <span id={`${id}-modes`} className="sr-only">
             Travel by
           </span>
@@ -547,18 +547,73 @@ export function TripInputs({
             aria-labelledby={`${id}-modes`}
             value={value.modes}
             onValueChange={(v) => set("modes", v as TransportType[])}
-            className="flex-wrap"
+            className="flex-wrap justify-center"
           >
             {MODE_OPTIONS.map(({ value: mode, label, Icon }) => (
-              <ToggleGroupItem key={mode} value={mode} className="rounded-full">
+              <ToggleGroupItem
+                              key={mode}
+                              value={mode}
+                              className="w-36 rounded-full bg-card hover:bg-muted aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground"
+                            >
                 <Icon />
                 {label}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
+          {/* <TravelerPicker
+            id={`${id}-travelers`}
+            value={value.travelers}
+            onChange={(n) => set("travelers", n)}
+          /> */}
+          <Combobox
+            items={BUDGET_SUGGESTIONS}
+            filter={null}
+            value={
+              BUDGET_SUGGESTIONS.includes(value.budget) ? value.budget : null
+            }
+            onValueChange={(v) => set("budget", v ?? "")}
+            inputValue={value.budget}
+            onInputValueChange={(v) =>
+              set(
+                "budget",
+                v
+                  .replace(/\D/g, "")
+                  .replace(/^0+/, "")
+                  .slice(0, MAX_BUDGET_DIGITS)
+              )
+            }
+          >
+            <ComboboxInput
+              id={`${id}-budget`}
+              aria-label="Max budget"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="Max budget"
+              className="h-8 w-36 rounded-full bg-card dark:bg-card [&_input]:text-sm [&_input]:font-medium"
+                            showTrigger={false}
+            >
+              <InputGroupAddon>
+                <InputGroupText className="font-medium text-foreground">
+                  €
+                </InputGroupText>
+              </InputGroupAddon>
+            </ComboboxInput>
+            <ComboboxContent className="min-w-32">
+              <ComboboxList>
+                {(item: string) => (
+                  <ComboboxItem key={item} value={item}>
+                    €{item}
+                  </ComboboxItem>
+                )}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
         </div>
 
-        <Field orientation="horizontal" className="ml-auto w-auto items-center">
+        {/* <Field
+                  orientation="horizontal"
+                  className="ml-auto h-8 w-auto items-center rounded-full border border-input bg-card px-3"
+                >
           <Checkbox
             id={`${id}-flexible`}
             checked={value.flexibleDates}
@@ -585,7 +640,7 @@ export function TripInputs({
               selected departure date to find more affordable journeys.
             </TooltipContent>
           </Tooltip>
-        </Field>
+        </Field> */}
       </div>
 
       {value.modes.length === 0 && (
@@ -594,6 +649,7 @@ export function TripInputs({
         </p>
       )}
 
+      {/* Advanced search section (temporarily disabled)
       <Collapsible className="flex flex-col gap-4">
         <CollapsibleTrigger
           render={<Button type="button" variant="ghost" className="self-start" />}
@@ -660,20 +716,7 @@ export function TripInputs({
           </Card>
         </CollapsibleContent>
       </Collapsible>
-
-      <Button
-        type="submit"
-        size="lg"
-        disabled={!isTripInputsComplete(value) || loading}
-        className="h-14 w-full text-lg font-bold shadow-md [&_svg:not([class*='size-'])]:size-5"
-      >
-        {loading
-          ? "Searching…"
-          : requiresSignUp
-            ? "Sign up to continue"
-            : "Find my trip"}
-        {!loading && <ArrowRight />}
-      </Button>
+      */}
     </form>
   )
 }
