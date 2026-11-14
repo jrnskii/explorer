@@ -2,10 +2,16 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-Install dependencies with `bun install --frozen-lockfile`, then run the development server:
+First, run the development server:
 
 ```bash
-bun run dev
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -29,55 +35,32 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-## Staging search
+## Local fare forecasts
 
-The home page sends the shared `RoundTripSearchInput` to `/api/round-trip`.
-The server route authenticates to `BACKEND_GRAPHQL_URL` with the server-only
-`APP_ACCESS_TOKEN`; credentials never enter the browser. The API executes the
-shared SDL directly. City identifiers are the autocomplete catalog's GeoNames
-IDs (`gn-…`), with no hardcoded city allowlist.
+The page requests `/api/pricing` to price its **sample itineraries**, replacing the
+preview price constants. Dates shift to the selected calendar day; home, modes,
+budget, stops and stay constraints filter the samples. Flexible-date exploration
+is unsupported and returns a visible message. This remains a sample-itinerary
+demonstration, not a full schedule search or booking service. An itinerary is
+omitted if any independent one-way demo ticket lacks a forecast. Estimated totals
+include travelers once. Backend arithmetic uses decimals; browser ticket sums and
+budget comparisons use integer cents.
 
-The backend ranks dated services from the prepared GTFS/forecast snapshot and
-sends **only the single best opportunity** to Scrappa/Omio. It never sends all
-candidates, retries a paid request automatically, or tries another route after
-verification fails. The checked result uses provider-advertised fares and actual
-provider timings, revalidated against the original constraints. Other results
-remain labelled estimates (including any ranking calibration). If verification
-fails, the page says so and labels all prices as estimates. Scrappa does not
-promise final checkout fees; these require provider confirmation.
+From the repository root run `just extract-pricing`, `just train-pricing`, and
+`uv sync --project backend --locked` before starting the frontend. The Node server
+requires the adjacent backend checkout, installed Python environment, `uv` on PATH,
+and `fixtures/data/pricing/forecast_models.json`. Set `PRICING_UV_PATH` to the trusted
+server executable's absolute path if necessary. Python and model data are provisioned
+separately from the Next bundle; raw fixture datasets are not bundled. This local
+integration requires a Node host with Python support, not Edge/static-only hosting.
 
-See [`docs/staging.md`](../docs/staging.md) for snapshot preparation, environment
-configuration, container startup, readiness and refresh procedures. Run `just
-staging` with `.env.staging` configured. Containers use production Next.js and
-Uvicorn servers; the backend is accessible only on the Compose network.
+The server invokes a fixed backend module with JSON stdin, never a user-provided
+shell command. Limits are 64 queries/64 KiB, two active processes per server instance,
+20 seconds and 1 MiB of output. Public errors do not expose backend paths or stderr.
+No paid provider is called and there is no mock fallback. Browser aborts prevent
+stale results; backend processes remain bounded by the server timeout.
 
-For local processes, run `just api` with root `.env` containing `APP_ACCESS_TOKEN`,
-`SCHEDULE_SNAPSHOT_PATH`, and `SCRAPPA_API_KEY`. In another terminal run
-`bun run --cwd frontend dev`. Development startup reads `APP_ACCESS_TOKEN` and
-`BACKEND_GRAPHQL_URL` from the root `.env` when they are not already set, and defaults
-the backend URL to `http://127.0.0.1:8000/graphql`. Existing process settings and
-`frontend/.env*` settings take precedence. If you use `just api 9000`, set
-`BACKEND_GRAPHQL_URL=http://127.0.0.1:9000/graphql`. Restart the development server
-after changing root `.env` settings.
-
-The root fallback applies only to the development server. Production builds and
-servers require explicit runtime configuration, as provided by Compose. Never
-prefix credentials with `NEXT_PUBLIC_` or add them to `next.config`'s `env` option.
-
-The v1 API prices one adult. Departure is a local calendar day converted to an
-explicit-offset instant. A single duration is a maximum elapsed trip length;
-ranges constrain the earliest and latest return. Unsupported form constraints
-are reported rather than ignored. Date coverage and transport availability come
-from the loaded data, not fabricated departures or fares. The page reports search
-bounds and missing flight schedule coverage. The current GTFS compiler supplies
-rail, bus and ferry schedules, not flights; static airline topology is never used
-as a dated flight schedule.
-
-Run `bun run --cwd frontend test`, `bun run --cwd frontend lint`,
-`bun run --cwd frontend tsc --noEmit`, and `bun run --cwd frontend build`.
-
-Search uses departure dates ±1 day and shows up to ten locally ranked routes.
-Budget and minimum-city controls are removed. Routes cannot be simple A–B–A
-returns or revisit intermediate cities. Only the best candidate (or runner-up
-on failure) is provider-checked; other cards show date-only estimates without
-booking actions. Missing provider quotes do not hide those estimates.
+Run `bun run --cwd frontend test` from the repository root. The minimal setup uses
+Vitest, React Testing Library and jsdom. Tests cover loading, errors,
+recovery, empty coverage, estimate validation, filtering, exact sums, party totals
+and API input limits.

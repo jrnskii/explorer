@@ -4,8 +4,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { highlightTimeline } from "@/lib/europe-route-wave"
 
 import Home from "./page"
-import type { RoundTripOption } from "@/generated/schema_v1"
-import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 
 // Sample trip: Vilnius > Riga > Tallinn > Vilnius, i.e. four stops.
 const SHOWCASE_MS = highlightTimeline([[0, 0], [1, 1], [2, 2], [3, 3]]).endMs
@@ -51,12 +49,12 @@ vi.mock("@/lib/europe-cities", () => ({
   popularEuropeCities: () => Promise.resolve([]),
   searchEuropeCities: () => Promise.resolve([]),
 }))
-const { detectDepartureCity, searchRoundTrips } = vi.hoisted(() => ({
-  searchRoundTrips: vi.fn<(value: unknown, signal?: AbortSignal) => Promise<RoundTripOption[]>>(() => new Promise(() => {})),
+const { detectDepartureCity, priceSamples } = vi.hoisted(() => ({
+  priceSamples: vi.fn(() => new Promise<never[]>(() => {})),
   detectDepartureCity: vi.fn(() => Promise.resolve(null as unknown)),
 }))
 vi.mock("@/lib/ip-origin", () => ({ detectDepartureCity }))
-vi.mock("@/lib/round-trip-search", () => ({ searchRoundTrips }))
+vi.mock("@/lib/sample-forecast", () => ({ priceSamples }))
 vi.mock("@/components/trip-inputs", () => ({
   EMPTY_TRIP_INPUTS: { travelers: 3 },
   TripInputs: ({ onSubmit, value }: { onSubmit: (v: { travelers: number }) => void; value: { travelers: number; departure?: { name: string } | null; date?: Date; duration?: string; budget?: string } }) => (
@@ -71,13 +69,13 @@ vi.mock("@/components/trip-inputs", () => ({
 describe("Home default trip", () => {
   afterEach(() => vi.useRealTimers())
 
-  test("starts in 2 days, lasts 3 days, without a budget", async () => {
+  test("starts in 2 days, lasts 3 days, with a 200 EUR budget", async () => {
     vi.useFakeTimers({ toFake: ["Date"] })
     vi.setSystemTime(new Date(2026, 11, 30, 15, 30))
     render(<Home />)
     await act(async () => {})
     expect(screen.getByTestId("defaults")).toHaveTextContent(
-      `${new Date(2027, 0, 1).toDateString()}|3|undefined`
+      `${new Date(2027, 0, 1).toDateString()}|3|200`
     )
   })
 })
@@ -98,10 +96,7 @@ describe("Home departure from IP", () => {
 })
 
 describe("Home search", () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    searchRoundTrips.mockResolvedValue([SAMPLE_OPTIONS[0]])
-  })
+  beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
   test("shows everything while idle", () => {
@@ -166,7 +161,7 @@ describe("Home search", () => {
 
   test("hides everything but the map while searching, then restores the page with results", async () => {
     let finish: ((value: never[]) => void) | undefined
-    searchRoundTrips.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    priceSamples.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
     render(<Home />)
     fireEvent.click(screen.getByText("Search"))
     const content = screen.getByTestId("page-content")
@@ -220,25 +215,4 @@ describe("Home search", () => {
     expect(screen.getByTestId("loader")).toHaveAttribute("data-highlight", "0")
   })
 
-})
-
-test("shows a search error and allows retry to empty results", async () => {
-  searchRoundTrips.mockRejectedValueOnce(new Error("Search is unavailable"))
-  render(<Home />)
-  fireEvent.click(screen.getByText("Search"))
-  expect(await screen.findByRole("alert")).toHaveTextContent("Search is unavailable")
-  expect(screen.getByTestId("page-content")).not.toHaveAttribute("inert")
-  searchRoundTrips.mockResolvedValueOnce([])
-  fireEvent.click(screen.getByText("Search"))
-  expect(await screen.findByText("Results")).toBeInTheDocument()
-  expect(screen.queryByRole("alert")).toBeNull()
-  expect(screen.getByText(/Up to 10 cheapest/)).toHaveAttribute("role", "status")
-})
-
-test("aborts a pending search on unmount", () => {
-  const { unmount } = render(<Home />)
-  fireEvent.click(screen.getByText("Search"))
-  const signal = searchRoundTrips.mock.calls.at(-1)?.[1] as AbortSignal | undefined
-  unmount()
-  expect(signal?.aborted).toBe(true)
 })

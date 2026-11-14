@@ -90,38 +90,6 @@ describe("TripOpportunities", () => {
   })
 })
 
-test("distinguishes the single provider-checked price from forecast estimates", () => {
-  render(<TripOpportunities options={SAMPLE_OPTIONS.slice(0, 3)}
-    priceStatuses={["provider_advertised", "estimated", "adjusted_estimate"]} />)
-  expect(screen.getAllByText("Checked with Scrappa/Omio")).toHaveLength(1)
-  expect(screen.getByText("Forecast estimate")).toBeInTheDocument()
-  expect(screen.getByText("Adjusted forecast estimate")).toBeInTheDocument()
-})
-
-test("keeps over-budget cards visible and labels only those options", () => {
-  render(<TripOpportunities options={SAMPLE_OPTIONS.slice(0, 2)}
-    priceStatuses={["provider_advertised", "estimated"]} overBudgetOptions={[true, false]} />)
-  expect(screen.getByText("2 travel opportunities")).toBeInTheDocument()
-  expect(screen.getAllByText("Over budget")).toHaveLength(1)
-  expect(screen.getByText("Checked with Scrappa/Omio")).toBeInTheDocument()
-  expect(screen.getByText("€89.90")).toBeInTheDocument()
-})
-
-test("renders estimate-only results without invented times or booking actions", () => {
-  const estimates = Array.from({ length: 10 }, (_, index) => ({
-    rank: index + 1,
-    cities: [{ id: "a", name: "Home" }, { id: "b", name: "Riga" }, { id: "c", name: "Tallinn" }, { id: "a", name: "Home" }],
-    departure_date: "2030-01-02", return_date: "2030-01-04",
-    total_price: { amount: String(30 + index), currency: "EUR" }, schedule_source: "reference",
-  }))
-  render(<TripOpportunities options={[]} estimates={estimates} />)
-  expect(screen.getByText("10 travel opportunities")).toBeInTheDocument()
-  expect(screen.getAllByText("Estimated route · schedule unconfirmed")).toHaveLength(10)
-  expect(screen.queryByRole("button", { name: "Book" })).not.toBeInTheDocument()
-  expect(screen.queryByText(/\d\d:\d\d/)).not.toBeInTheDocument()
-  expect(screen.getAllByText(/Planned dates:/)).toHaveLength(10)
-})
-
 describe("TripOpportunities featured option", () => {
   test("highlights only the featured option with its label", () => {
     const { container } = render(

@@ -1,18 +1,17 @@
-import * as React from "react"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, test, vi } from "vitest"
 
-import { EMPTY_TRIP_INPUTS, TripInputs, type TripInputsValue } from "./trip-inputs"
+import { EMPTY_TRIP_INPUTS, TripInputs } from "./trip-inputs"
 
-const disclaimer = "Published transport schedules with forecast prices. Final fares and availability require provider confirmation."
+const disclaimer = "Sample itineraries with estimated fares. Schedules are illustrative, not bookable. Routes without supported pricing are omitted."
 
-test("trip estimate help appears on hover and dismisses on Escape", async () => {
+test("sample itinerary help appears on hover and dismisses on Escape", async () => {
   const user = userEvent.setup()
   const onSubmit = vi.fn()
   render(<TripInputs value={EMPTY_TRIP_INPUTS} onChange={vi.fn()} cities={[]} onSubmit={onSubmit} />)
   expect(screen.queryByText(disclaimer)).not.toBeInTheDocument()
-  const help = screen.getByRole("button", { name: "About trip estimates" })
+  const help = screen.getByRole("button", { name: "About sample itineraries" })
   expect(help).toHaveAttribute("type", "button")
   await user.hover(help)
   expect(await screen.findByText(disclaimer)).toHaveTextContent(disclaimer)
@@ -22,12 +21,13 @@ test("trip estimate help appears on hover and dismisses on Escape", async () => 
   expect(onSubmit).not.toHaveBeenCalled()
 })
 
-test("trip estimate help is available from the keyboard", async () => {
+test("sample itinerary help is available from the keyboard", async () => {
   const user = userEvent.setup()
   render(<TripInputs value={EMPTY_TRIP_INPUTS} onChange={vi.fn()} cities={[]} />)
-  screen.getByRole("button", { name: "About trip estimates" }).focus()
-  await user.keyboard("{Shift>}{Tab}{/Shift}{Tab}")
-  expect(screen.getByRole("button", { name: "About trip estimates" })).toHaveFocus()
+  const budget = screen.getByRole("combobox", { name: "Max budget" })
+  budget.focus()
+  await user.tab()
+  expect(screen.getByRole("button", { name: "About sample itineraries" })).toHaveFocus()
   expect(await screen.findByText(disclaimer)).toHaveTextContent(disclaimer)
 })
 
@@ -54,8 +54,10 @@ test("missing transportation guidance appears on Search hover and keyboard focus
   await user.unhover(search)
   await user.keyboard("{Escape}")
   await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument())
-  screen.getByRole("button", { name: "About trip estimates" }).focus()
+  const budget = screen.getByRole("combobox", { name: "Max budget" })
+  budget.focus()
   await user.tab({ shift: true })
+  // Travel mode toggles precede Budget; reach Search in reverse tab order.
   await user.tab({ shift: true })
   expect(search).toHaveFocus()
   expect(await screen.findByText(message)).toBeInTheDocument()
@@ -65,21 +67,4 @@ test("missing transportation guidance appears on Search hover and keyboard focus
   await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument())
   await user.click(search)
   expect(onSubmit).toHaveBeenCalledOnce()
-})
-
-test("search submits without budget or city-count controls", async () => {
-  const user = userEvent.setup()
-  const onSubmit = vi.fn()
-  const value: TripInputsValue = {
-    ...EMPTY_TRIP_INPUTS,
-    departure: { id: "gn-593116", name: "Vilnius", country: "Lithuania" },
-    date: new Date(2030, 0, 1), duration: "3",
-  }
-  render(<TripInputs value={value} onChange={vi.fn()} cities={[]} onSubmit={onSubmit} />)
-  expect(screen.queryByRole("combobox", { name: "Budget" })).not.toBeInTheDocument()
-  expect(screen.queryByRole("textbox", { name: "Minimum cities to visit" })).not.toBeInTheDocument()
-  const search = screen.getByRole("button", { name: "Search" })
-  expect(search).toBeEnabled()
-  await user.click(search)
-  expect(onSubmit).toHaveBeenCalledWith(value)
 })

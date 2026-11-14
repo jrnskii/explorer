@@ -1,6 +1,5 @@
 "use client"
 
-import type { EstimatedRoute } from "@/lib/round-trip-search"
 import { Fragment } from "react"
 import { ArrowRight, Bookmark, Bus, ChevronDown, Plane, Ship, TrainFront, type LucideIcon } from "lucide-react"
 
@@ -129,8 +128,6 @@ export function TripOpportunity({
   rank,
   travelers = 1,
   priceScope = "adult",
-  priceStatus,
-  overBudget = false,
   featuredLabel,
   className,
 }: {
@@ -141,8 +138,6 @@ export function TripOpportunity({
   /** Prices are per adult; the total shown is multiplied by this. */
   travelers?: number
   priceScope?: "adult" | "party"
-  priceStatus?: string
-  overBudget?: boolean
   className?: string
 }) {
   const { home, travelSeconds, totalSeconds, departAt, returnAt } =
@@ -237,10 +232,6 @@ export function TripOpportunity({
                   ? "Price per adult"
                   : `Total for ${travelers} travellers`}
               </div>
-              {priceStatus && <div className="text-xs font-medium text-muted-foreground">
-                {priceStatus === "provider_advertised" ? "Checked with Scrappa/Omio" : priceStatus === "adjusted_estimate" ? "Adjusted forecast estimate" : "Forecast estimate"}
-              </div>}
-              {overBudget && <Badge variant="outline">Over budget</Badge>}
               <div className="text-2xl font-semibold">
                 {formatPrice(
                   priceScope === "party" ? option.total_price.amount : String(Number(option.total_price.amount) * travelers),
@@ -325,69 +316,43 @@ export function TripOpportunity({
 
 export function TripOpportunities({
   options,
-  estimates = [],
-  ranks,
   travelers = 1,
   priceScope = "adult",
-  priceStatuses,
-  overBudgetOptions,
   featuredIndex,
   featuredLabel = "Best match",
   className,
 }: {
   options: RoundTripOption[]
-  estimates?: EstimatedRoute[]
-  ranks?: number[]
   travelers?: number
   priceScope?: "adult" | "party"
-  priceStatuses?: string[]
-  overBudgetOptions?: boolean[]
   /** Index of the option to highlight as the best one. */
   featuredIndex?: number
   featuredLabel?: string
   className?: string
 }) {
-  const rows = [
-    ...options.map((option, index) => ({
-      rank: ranks?.[index] ?? index + 1,
-      content: <TripOpportunity
-        option={option}
-        rank={ranks?.[index] ?? index + 1}
-        travelers={travelers}
-        priceScope={priceScope}
-        featuredLabel={index === featuredIndex ? featuredLabel : undefined}
-        priceStatus={priceStatuses?.[index]}
-        overBudget={overBudgetOptions?.[index]}
-        className={LIST_CARD}
-      />,
-    })),
-    ...estimates.map((estimate) => ({
-      rank: estimate.rank,
-      content: <Card className={cn(LIST_CARD, "gap-3 p-5")}>
-        <Badge variant="outline">Estimated route · schedule unconfirmed</Badge>
-        <h3 className="font-medium">{estimate.cities.map((city) => city.name).join(" → ")}</h3>
-        <p className="text-sm text-muted-foreground">
-          Planned dates: {estimate.departure_date} – {estimate.return_date}
-        </p>
-        <p className="font-semibold">
-          {estimate.total_price.currency} {estimate.total_price.amount}{" "}
-          <span className="text-sm font-normal text-muted-foreground">estimated / adult</span>
-        </p>
-      </Card>,
-    })),
-  ].sort((a, b) => a.rank - b.rank).slice(0, 10)
   return (
     <section
       aria-label="Travel opportunities"
       className={cn("flex flex-col gap-3", className)}
     >
       <h2 className="text-sm font-medium text-white">
-        {rows.length === 0
+        {options.length === 0
           ? "No travel opportunities match your search"
-          : `${rows.length} travel ${rows.length === 1 ? "opportunity" : "opportunities"}`}
+          : `${options.length} travel ${options.length === 1 ? "opportunity" : "opportunities"}`}
       </h2>
       <ul className={LIST}>
-        {rows.map((row) => <li key={row.rank}>{row.content}</li>)}
+        {options.map((option, i) => (
+          <li key={option.path.map((l) => l.departure_at).join("|")}>
+            <TripOpportunity
+              option={option}
+              rank={i + 1}
+              travelers={travelers}
+              priceScope={priceScope}
+              featuredLabel={i === featuredIndex ? featuredLabel : undefined}
+              className={LIST_CARD}
+            />
+          </li>
+        ))}
       </ul>
     </section>
   )

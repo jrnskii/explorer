@@ -58,7 +58,7 @@ describe("stopNames", () => {
   })
 
   test("is empty for an empty path", () => {
-    expect(stopNames({ total_price: { amount: "1", currency: "EUR" }, path: [], city_stays: [] })).toEqual([])
+    expect(stopNames({ total_price: { amount: "1", currency: "EUR" }, city_stays: [], path: [] })).toEqual([])
   })
 })
 
@@ -103,11 +103,4 @@ describe("locateStops", () => {
     expect(await locateStops(["Tokyo"], null, farAway)).toBeNull()
     expect(await locateStops([], null, noSearch)).toBeNull()
   })
-})
-
- test("uses resolved city names for canonical backend identifiers", () => {
-  const trip = option("1", "EUR", "gn-1", "gn-2")
-  trip.path[0].from_city = { id: "gn-1", name: "Vilnius", latitude: 54.68, longitude: 25.3 }
-  trip.path[0].to_city = { id: "gn-2", name: "Riga", latitude: 56.95, longitude: 24.1 }
-  expect(stopNames(trip)).toEqual(["Vilnius", "Riga"])
 })

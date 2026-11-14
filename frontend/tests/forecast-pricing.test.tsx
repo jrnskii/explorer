@@ -37,12 +37,6 @@ describe("forecast pricing", () => {
     expect(prepareSamples(SAMPLE_OPTIONS, { ...input, mustVisit: [{ id: "xx", name: "Unknown", country: "France", code: "XXX" }] })).toEqual([])
     expect(() => prepareSamples(SAMPLE_OPTIONS, { ...input, flexibleDates: true })).toThrow("fixed dates")
   })
-  test("sample minimum cities allows longer itineraries and excludes home", () => {
-    const options = prepareSamples(SAMPLE_OPTIONS, { ...input, numberOfCities: "1" })
-    expect(options.length).toBeGreaterThan(0)
-    expect(options.some((option) => new Set(option.path.map((leg) => leg.to_city.name).filter((name) => name !== input.departure?.name)).size > 1)).toBe(true)
-    expect(prepareSamples(SAMPLE_OPTIONS, { ...input, numberOfCities: "99" })).toEqual([])
-  })
   test("fetches party forecasts, applies budget and never uses the preview price", async () => {
     fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(implementation(async (_url, init) => {
       const payload = JSON.parse(String(init?.body))
@@ -70,7 +64,7 @@ describe("forecast pricing", () => {
 vi.mock("@/components/trip-inputs", () => ({
   EMPTY_TRIP_INPUTS: {},
   TripInputs: ({ onSubmit, loading }: { onSubmit: (value: TripInputsValue) => void; loading: boolean }) =>
-    <button disabled={loading} onClick={() => onSubmit({ ...input, travelers: 1, departure: { id: "gn-756135", name: "Warsaw", country: "Poland" } })}>Estimate fares</button>,
+    <button disabled={loading} onClick={() => onSubmit(input)}>Estimate fares</button>,
 }))
 vi.mock("@/components/europe-loader", () => ({ EuropeLoader: ({ loading }: { loading: boolean }) => <div data-testid="loader" data-loading={loading} /> }))
 vi.mock("@/components/cloud-overlay", () => ({ CloudOverlay: () => null }))
@@ -78,16 +72,17 @@ vi.mock("@/components/site-header", () => ({ SiteHeader: () => null }))
 vi.mock("@/lib/europe-cities", () => ({ popularEuropeCities: async () => [], searchEuropeCities: async () => [] }))
 vi.mock("@/lib/ip-origin", () => ({ detectDepartureCity: async () => null }))
 
-test("page shows loading and renders backend per-adult prices", async () => {
+test("page shows loading and renders estimated party totals once", async () => {
   let finish: ((value: Response) => void) | undefined
   fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(implementation(() => new Promise<Response>((resolve) => { finish = resolve })))
   render(<Home />)
   fireEvent.click(screen.getByRole("button", { name: "Estimate fares" }))
   expect(screen.getByTestId("loader")).toHaveAttribute("data-loading", "true")
-  expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)).input.departure_city).toBe("gn-756135")
-  await act(async () => { finish?.(Response.json({ data: { round_trip_options: [{ ...SAMPLE_OPTIONS[0], total_price: { amount: "20.00", currency: "EUR" } }] } })) })
-  expect(await screen.findByRole("status")).toHaveTextContent("Up to 10 cheapest")
+  const payload = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))
+  await act(async () => { finish?.(Response.json({ forecasts: payload.queries.map(() => estimate("10.00")) })) })
+  expect((await screen.findAllByText("estimated total for 2 travellers")).length).toBeGreaterThan(0)
   expect(screen.getAllByText("€20").length).toBeGreaterThan(0)
+  // The disclaimer now lives in TripInputs help, covered by its interaction tests.
   expect(screen.queryByText(/Schedules are illustrative, not bookable/)).not.toBeInTheDocument()
 })
 
@@ -96,7 +91,10 @@ test("page announces pricing errors and recovers on another submission", async (
   render(<Home />)
   fireEvent.click(screen.getByRole("button", { name: "Estimate fares" }))
   expect((await screen.findByRole("alert")).textContent).toContain("unavailable")
-  fetchSpy.mockResolvedValue(Response.json({ data: { round_trip_options: [] } }))
+  fetchSpy.mockImplementation(implementation(async (_url, init) => {
+    const payload = JSON.parse(String(init?.body))
+    return Response.json({ forecasts: payload.queries.map(() => null) })
+  }))
   fireEvent.click(screen.getByRole("button", { name: "Estimate fares" }))
   await screen.findByText("No travel opportunities match your search")
   expect(screen.queryByRole("alert")).toBeNull()

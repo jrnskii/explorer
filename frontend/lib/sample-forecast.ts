@@ -28,7 +28,7 @@ export function prepareSamples(options: RoundTripOption[], input: TripInputsValu
         Date.parse(option.path[option.path.length - 1].arrival_at) < limit &&
         input.mustVisit.every((city) => visits.has(city.name)) &&
         input.avoid.every((city) => !visits.has(city.name)) &&
-        (!input.numberOfCities || stops.length >= Number(input.numberOfCities)) &&
+        (!input.numberOfCities || stops.length === Number(input.numberOfCities)) &&
         (!input.daysPerCity || option.city_stays.every((stay) => stay.time_spent >= Number(input.daysPerCity) * 86400))
     })
 }

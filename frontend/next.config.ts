@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
-import { resolve } from "node:path";
-import { configureSearchEnvironment } from "./scripts/search-environment";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  /* config options here */
   experimental: {
     agentFeedback: true,
   },
@@ -19,7 +17,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default function config(phase: string): NextConfig {
-  configureSearchEnvironment(phase, resolve(import.meta.dirname, "../.env"));
-  return nextConfig;
-}
+export default nextConfig;

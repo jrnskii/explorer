@@ -36,7 +36,7 @@ export function cheapestOption(
 export function stopNames(option: RoundTripOption): string[] {
   const { path } = option
   if (path.length === 0) return []
-  return [path[0].from_city?.name ?? path[0].from, ...path.map((leg) => leg.to_city?.name ?? leg.to)]
+  return [path[0].from, ...path.map((leg) => leg.to)]
 }
 
 /**

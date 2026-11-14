@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import type { City } from "@/components/city-picker"
 import { CloudOverlay } from "@/components/cloud-overlay"
@@ -42,6 +42,7 @@ const FLIGHT_CLOUD_DENSITY = 0.75
 
 const DEFAULT_START_OFFSET_DAYS = 2
 const DEFAULT_DURATION = "3"
+const DEFAULT_BUDGET = "200"
 
 /** Local midnight, `days` days after today. */
 function startDateFromToday(days: number, now = new Date()) {
@@ -53,22 +54,11 @@ function startDateFromToday(days: number, now = new Date()) {
  * the same synthetic Vilnius > Warsaw > Berlin > Stockholm > Riga > Vilnius trip
  * is showcased for exactly `DEMO_SHOWCASE_MS` and listed as the best match.
  */
-function subscribeToLocalDay(onChange: () => void) {
-  window.addEventListener("focus", onChange)
-  return () => window.removeEventListener("focus", onChange)
-}
-
 export function DemoHome() {
-  const localDay = useSyncExternalStore(subscribeToLocalDay, () => new Date().toDateString(), () => "")
-  const [tripState, setTrip] = useState<TripInputsValue>({
+  const [trip, setTrip] = useState<TripInputsValue>({
     ...EMPTY_TRIP_INPUTS,
     departure: VILNIUS,
-    duration: DEFAULT_DURATION,
   })
-  const trip = {
-    ...tripState,
-    date: tripState.date ?? (localDay ? startDateFromToday(DEFAULT_START_OFFSET_DAYS, new Date(localDay)) : undefined),
-  }
   const [searchedTravelers, setSearchedTravelers] = useState(1)
   const [status, setStatus] = useState<"idle" | "loading" | "done">("idle")
   const [flying, setFlying] = useState(false)
@@ -85,6 +75,16 @@ export function DemoHome() {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // Set after mount: "today" depends on the visitor's clock.
+  useEffect(() => {
+    setTrip((t) => ({
+      ...t,
+      date: t.date ?? startDateFromToday(DEFAULT_START_OFFSET_DAYS),
+      duration: t.duration || DEFAULT_DURATION,
+      budget: t.budget || DEFAULT_BUDGET,
+    }))
   }, [])
 
   function search(value: TripInputsValue) {
