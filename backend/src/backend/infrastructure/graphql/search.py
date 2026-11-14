@@ -64,10 +64,7 @@ def configured_search():
         raise SearchUnavailable(
             "SCHEDULE_SNAPSHOT_PATH must identify a prepared schedule snapshot."
         )
-    if (
-        os.environ.get("SCRAPPA_API_KEY", "").strip() in ("", "change_in_prod")
-        and os.environ.get("SCRAPPA_CACHE_ONLY") != "1"
-    ):
+    if os.environ.get("SCRAPPA_API_KEY", "").strip() in ("", "change_in_prod"):
         raise SearchUnavailable(
             "SCRAPPA_API_KEY is required for best-opportunity verification."
         )

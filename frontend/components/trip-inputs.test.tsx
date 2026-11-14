@@ -4,7 +4,7 @@ import { expect, test, vi } from "vitest"
 
 import { EMPTY_TRIP_INPUTS, TripInputs } from "./trip-inputs"
 
-const disclaimer = "Sample itineraries with estimated fares. Schedules are illustrative, not bookable. Routes without supported pricing are omitted."
+const disclaimer = "Search multi-city route ideas and compare estimated fares. Unverified routes are labeled as estimates, not bookable availability."
 
 test("sample itinerary help appears on hover and dismisses on Escape", async () => {
   const user = userEvent.setup()
@@ -24,9 +24,7 @@ test("sample itinerary help appears on hover and dismisses on Escape", async () 
 test("sample itinerary help is available from the keyboard", async () => {
   const user = userEvent.setup()
   render(<TripInputs value={EMPTY_TRIP_INPUTS} onChange={vi.fn()} cities={[]} />)
-  const budget = screen.getByRole("combobox", { name: "Max budget" })
-  budget.focus()
-  await user.tab()
+  screen.getByRole("button", { name: "About sample itineraries" }).focus()
   expect(screen.getByRole("button", { name: "About sample itineraries" })).toHaveFocus()
   expect(await screen.findByText(disclaimer)).toHaveTextContent(disclaimer)
 })
@@ -54,11 +52,7 @@ test("missing transportation guidance appears on Search hover and keyboard focus
   await user.unhover(search)
   await user.keyboard("{Escape}")
   await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument())
-  const budget = screen.getByRole("combobox", { name: "Max budget" })
-  budget.focus()
-  await user.tab({ shift: true })
-  // Travel mode toggles precede Budget; reach Search in reverse tab order.
-  await user.tab({ shift: true })
+  search.focus()
   expect(search).toHaveFocus()
   expect(await screen.findByText(message)).toBeInTheDocument()
   await user.keyboard("{Enter}")
@@ -67,4 +61,10 @@ test("missing transportation guidance appears on Search hover and keyboard focus
   await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument())
   await user.click(search)
   expect(onSubmit).toHaveBeenCalledOnce()
+})
+
+test("search requires no budget and exposes no budget control", () => {
+  render(<TripInputs value={{ ...EMPTY_TRIP_INPUTS, departure: { id: "vno", name: "Vilnius", country: "Lithuania" }, date: new Date(2030, 0, 1), duration: "3" }} cities={[]} onChange={vi.fn()} />)
+  expect(screen.queryByRole("combobox", { name: /budget/i })).not.toBeInTheDocument()
+  expect(screen.getByRole("button", { name: "Search" })).not.toHaveAttribute("aria-disabled", "true")
 })

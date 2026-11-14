@@ -5,11 +5,12 @@ export type EstimatedRoute = {
   return_date: string
   total_price: { amount: string; currency: string }
   schedule_source: string
+  transport_types?: TransportType[] | null
 }
 
 import type { TripInputsValue } from "@/components/trip-inputs"
 import type { City } from "@/components/city-picker"
-import type { RoundTripOption, RoundTripSearchInput } from "@/generated/schema_v1"
+import type { RoundTripOption, RoundTripSearchInput, TransportType } from "@/generated/schema_v1"
 
 export const ROUND_TRIP_QUERY = `query RoundTripOptions($input: RoundTripSearchInput!) {
   round_trip_options(input: $input) {
@@ -74,7 +75,7 @@ export function toRoundTripInput(value: TripInputsValue): RoundTripSearchInput {
   }
 }
 
-export async function searchRoundTrips(value: TripInputsValue, signal?: AbortSignal, onNotice?: (notice: string, priceStatuses: string[], overBudget: boolean[], estimates: EstimatedRoute[], ranks: number[]) => void): Promise<RoundTripOption[]> {
+export async function searchRoundTrips(value: TripInputsValue, signal?: AbortSignal, onNotice?: (notice: string, priceStatuses: string[], overBudget: boolean[], estimates: EstimatedRoute[], ranks: number[], fromCache: boolean) => void): Promise<RoundTripOption[]> {
   const input = toRoundTripInput(value)
   const response = await fetch("/api/round-trip", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -113,7 +114,7 @@ export async function searchRoundTrips(value: TripInputsValue, signal?: AbortSig
   if (!Array.isArray(estimates) || !estimates.every(isEstimatedRoute)) throw new Error("The search API returned invalid estimated routes.")
   const ranks = Array.isArray(metadata.option_pricing) ? metadata.option_pricing.map((row: unknown, index) =>
     isObject(row) && typeof row.rank === "number" ? row.rank : index + 1) : options.map((_, index) => index + 1)
-  if (!signal?.aborted) onNotice?.(notices.join(" "), priceStatuses, overBudget, estimates, ranks)
+  if (!signal?.aborted) onNotice?.(notices.join(" "), priceStatuses, overBudget, estimates, ranks, metadata.provider_results_cached === true)
   return options
 }
 
@@ -148,6 +149,8 @@ function isRoundTripOption(value: unknown): value is RoundTripOption {
 function isEstimatedRoute(value: unknown): value is EstimatedRoute {
   return isObject(value) && typeof value.rank === "number" && Number.isInteger(value.rank) && value.rank >= 1 && value.rank <= 10 &&
     Array.isArray(value.cities) && value.cities.length >= 4 && value.cities.every((city: unknown) => isObject(city) && typeof city.id === "string" && typeof city.name === "string") &&
+    (value.transport_types == null || (Array.isArray(value.transport_types) && value.transport_types.length === value.cities.length - 1 &&
+    value.transport_types.every((mode: unknown) => typeof mode === "string" && ["PLANES", "TRAINS", "BUSSES", "FERRIES"].includes(mode)))) &&
     typeof value.departure_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.departure_date) && Number.isFinite(Date.parse(value.departure_date)) &&
     typeof value.return_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.return_date) && Number.isFinite(Date.parse(value.return_date)) &&
     isObject(value.total_price) && typeof value.total_price.amount === "string" && /^\d+(?:\.\d+)?$/.test(value.total_price.amount) &&

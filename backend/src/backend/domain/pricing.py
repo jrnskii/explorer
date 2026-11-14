@@ -108,6 +108,7 @@ class RoundTripQuote:
     purchases: tuple[QuotedPurchase, ...]
     price_scope: str = "provider_advertised"
     fees_complete: bool = False
+    from_cache: bool = False
 
 
 @dataclass(frozen=True)

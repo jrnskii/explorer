@@ -108,9 +108,10 @@ def _parse(raw, planned, mode, currency, day):
 
 
 class ScrappaRoundTripPricer:
-    def __init__(self, client, place_ids, *, cities=None, cache_only=False, min_connection_seconds=0):
+    def __init__(self, client, place_ids, *, cities=None, cache_only=False, min_connection_seconds=0, refresh=False):
         if type(min_connection_seconds) is not int or min_connection_seconds < 0:
             raise ValueError("min_connection_seconds must be a non-negative integer")
+        self.refresh = refresh
         self.min_connection_seconds = min_connection_seconds
         self.client, self.place_ids, self.cities, self.cache_only = (
             client,
@@ -172,7 +173,7 @@ class ScrappaRoundTripPricer:
         try:
             for offer, params in planned:
                 response = self.client.request(
-                    "search", params, cache_only=self.cache_only, max_age_seconds=3600
+                    "search", params, cache_only=self.cache_only, max_age_seconds=3600, refresh=self.refresh
                 )
                 data = response.payload["data"]
                 if not matches_one_way_search(data, params):
@@ -217,6 +218,7 @@ class ScrappaRoundTripPricer:
                 searches.append((response, search_id, services))
             chosen = self._choose_services(searches, settings, self.min_connection_seconds)
             quotes = []
+            from_cache = all(response.source == "cache" for response, _, _ in searches)
             for (original, params), (search, search_id, services), service in zip(
                 planned, searches, chosen, strict=True
             ):
@@ -225,7 +227,9 @@ class ScrappaRoundTripPricer:
                     dict(search_id=search_id, trip_id=service.trip_id),
                     cache_only=self.cache_only,
                     max_age_seconds=3600,
+                    refresh=self.refresh,
                 )
+                from_cache = from_cache and response.source == "cache"
                 data = response.payload["data"]
                 if data.get("search_id") != search_id or data.get("currency") != params["currency"]:
                     raise ExactPricingUnavailable(
@@ -257,7 +261,7 @@ class ScrappaRoundTripPricer:
                         current.trip_id,
                     )
                 )
-            return RoundTripQuote(tuple(quotes))
+            return RoundTripQuote(tuple(quotes), from_cache=from_cache)
         except ScrappaError as error:
             raise ExactPricingUnavailable(
                 "Scrappa verification failed; cached outcomes are retained. Check credentials, freshness and provider availability before retrying explicitly."

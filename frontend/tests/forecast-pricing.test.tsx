@@ -31,21 +31,21 @@ describe("forecast pricing", () => {
   })
   test("filters modes, home and constraints while shifting to the selected calendar date", () => {
     const options = prepareSamples(SAMPLE_OPTIONS, { ...input, modes: ["PLANES"] })
-    expect(options).toHaveLength(1)
-    expect(options[0].path[0].departure_at.slice(0, 10)).toBe("2030-12-04")
+    expect(options).toHaveLength(0)
+    expect(prepareSamples(SAMPLE_OPTIONS, input)[0].path[0].departure_at.slice(0, 10)).toBe("2030-12-04")
     expect(prepareSamples(SAMPLE_OPTIONS, { ...input, departure: { id: "par", name: "Paris", country: "France", code: "PAR" } })).toEqual([])
     expect(prepareSamples(SAMPLE_OPTIONS, { ...input, mustVisit: [{ id: "xx", name: "Unknown", country: "France", code: "XXX" }] })).toEqual([])
     expect(() => prepareSamples(SAMPLE_OPTIONS, { ...input, flexibleDates: true })).toThrow("fixed dates")
   })
-  test("fetches party forecasts, applies budget and never uses the preview price", async () => {
+  test("fetches party forecasts, ignores budget and never uses the preview price", async () => {
     fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(implementation(async (_url, init) => {
       const payload = JSON.parse(String(init?.body))
       expect(payload.queries.every((q: { travelers: number }) => q.travelers === 2)).toBe(true)
       return Response.json({ forecasts: payload.queries.map(() => estimate("10.00")) })
     }))
-    const options = await priceSamples(SAMPLE_OPTIONS, { ...input, budget: "20.00", modes: ["PLANES"] })
-    expect(options).toHaveLength(1)
-    expect(options[0].total_price).toEqual({ amount: "20.00", currency: "EUR" })
+    const options = await priceSamples(SAMPLE_OPTIONS, { ...input, budget: "1.00" })
+    expect(options.length).toBeGreaterThan(0)
+    expect(options[0].total_price).toEqual({ amount: "30.00", currency: "EUR" })
   })
   test("rejects failed, malformed and non-EUR responses without fallback", async () => {
     const queries = [{ mode: "PLANES" as const, origin: "Paris", destination: "Rome", departure_date: "2030-12-04" }]
@@ -64,38 +64,54 @@ describe("forecast pricing", () => {
 vi.mock("@/components/trip-inputs", () => ({
   EMPTY_TRIP_INPUTS: {},
   TripInputs: ({ onSubmit, loading }: { onSubmit: (value: TripInputsValue) => void; loading: boolean }) =>
-    <button disabled={loading} onClick={() => onSubmit(input)}>Estimate fares</button>,
+    <button disabled={loading} onClick={() => onSubmit({ ...input, travelers: 1, departure: { id: "gn-2988507", name: "Paris", country: "France" } })}>Estimate fares</button>,
 }))
 vi.mock("@/components/europe-loader", () => ({ EuropeLoader: ({ loading }: { loading: boolean }) => <div data-testid="loader" data-loading={loading} /> }))
 vi.mock("@/components/cloud-overlay", () => ({ CloudOverlay: () => null }))
 vi.mock("@/components/site-header", () => ({ SiteHeader: () => null }))
-vi.mock("@/lib/europe-cities", () => ({ popularEuropeCities: async () => [], searchEuropeCities: async () => [] }))
+vi.mock("@/lib/europe-cities", () => ({ fold: (value: string) => value.toLowerCase(), popularEuropeCities: async () => [], searchEuropeCities: async () => [] }))
 vi.mock("@/lib/ip-origin", () => ({ detectDepartureCity: async () => null }))
 
-test("page shows loading and renders estimated party totals once", async () => {
+test("page searches the selected city and shows estimated routes even without verified options", async () => {
   let finish: ((value: Response) => void) | undefined
   fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(implementation(() => new Promise<Response>((resolve) => { finish = resolve })))
   render(<Home />)
   fireEvent.click(screen.getByRole("button", { name: "Estimate fares" }))
   expect(screen.getByTestId("loader")).toHaveAttribute("data-loading", "true")
+  expect(fetchSpy.mock.calls[0][0]).toBe("/api/round-trip")
   const payload = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))
-  await act(async () => { finish?.(Response.json({ forecasts: payload.queries.map(() => estimate("10.00")) })) })
-  expect((await screen.findAllByText("estimated total for 2 travellers")).length).toBeGreaterThan(0)
-  expect(screen.getAllByText("€20").length).toBeGreaterThan(0)
-  // The disclaimer now lives in TripInputs help, covered by its interaction tests.
-  expect(screen.queryByText(/Schedules are illustrative, not bookable/)).not.toBeInTheDocument()
+  expect(payload.input.departure_city).toBe("gn-2988507")
+  await act(async () => { finish?.(Response.json({
+    data: { round_trip_options: [] },
+    extensions: { estimated_routes: [{
+      rank: 1, cities: ["Paris", "Berlin", "Rome", "Paris"].map((name, index) => ({ id: String(index), name })),
+      departure_date: "2030-12-04", return_date: "2030-12-07",
+      total_price: { amount: "50.00", currency: "EUR" }, transport_types: ["TRAINS" as const, "TRAINS" as const, "TRAINS" as const], schedule_source: "reference",
+    }] },
+  })) })
+  expect(await screen.findByText("Berlin")).toBeInTheDocument()
+  fireEvent.click(screen.getByRole("button", { name: "Travel details" }))
+  expect(screen.getByText(/not bookable availability/)).toBeInTheDocument()
+  expect(screen.queryByText("No travel opportunities match your search")).not.toBeInTheDocument()
 })
 
-test("page announces pricing errors and recovers on another submission", async () => {
-  fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}, { status: 503 }))
+test("page reports service failure instead of claiming no matches", async () => {
+  fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ error: "Trip search is unavailable." }, { status: 503 }))
   render(<Home />)
   fireEvent.click(screen.getByRole("button", { name: "Estimate fares" }))
-  expect((await screen.findByRole("alert")).textContent).toContain("unavailable")
-  fetchSpy.mockImplementation(implementation(async (_url, init) => {
+  expect(await screen.findByRole("alert")).toHaveTextContent("Trip search is unavailable.")
+  expect(screen.queryByText("No travel opportunities match your search")).not.toBeInTheDocument()
+})
+
+test("rejects simple returns and repeat visits and caps sorted results at seven", async () => {
+  const valid = SAMPLE_OPTIONS[0]
+  const repeated = { ...valid, path: [...valid.path, ...valid.path] }
+  expect(prepareSamples([repeated], input)).toEqual([])
+  fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(implementation(async (_url, init) => {
     const payload = JSON.parse(String(init?.body))
-    return Response.json({ forecasts: payload.queries.map(() => null) })
+    return Response.json({ forecasts: payload.queries.map((_: unknown, i: number) => estimate((100 - Math.floor(i / valid.path.length)).toFixed(2))) })
   }))
-  fireEvent.click(screen.getByRole("button", { name: "Estimate fares" }))
-  await screen.findByText("No travel opportunities match your search")
-  expect(screen.queryByRole("alert")).toBeNull()
+  const results = await priceSamples(Array.from({ length: 9 }, () => valid), { ...input, budget: "" })
+  expect(results).toHaveLength(7)
+  expect(results.map(o => Number(o.total_price.amount))).toEqual([276, 279, 282, 285, 288, 291, 294])
 })

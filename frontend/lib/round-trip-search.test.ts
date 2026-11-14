@@ -64,7 +64,7 @@ describe("search transport", () => {
     })))
     const notice = vi.fn()
     expect(await searchRoundTrips({ ...value, budget: "1" }, undefined, notice)).toEqual(options)
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining("shown below"), ["provider_advertised"], [true], [], [1])
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining("shown below"), ["provider_advertised"], [true], [], [1], false)
   })
   test("sends no city-count filter when the optional field is blank", async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({ data: { round_trip_options: [] } }))
@@ -95,8 +95,8 @@ test("reports provider coverage and search bounds to the user", async () => {
     extensions: { unavailable_transport_types: ["PLANES"], results_limited: true } })))
   const notice = vi.fn()
   await searchRoundTrips(value, undefined, notice)
-  expect(notice).toHaveBeenCalledWith(expect.stringContaining("Flight schedules"), [], [], [], [])
-  expect(notice).toHaveBeenCalledWith(expect.stringContaining("limit"), [], [], [], [])
+  expect(notice).toHaveBeenCalledWith(expect.stringContaining("Flight schedules"), [], [], [], [], false)
+  expect(notice).toHaveBeenCalledWith(expect.stringContaining("limit"), [], [], [], [], false)
 })
 
 test("retains per-option checked versus forecast price status", async () => {
@@ -104,15 +104,50 @@ test("retains per-option checked versus forecast price status", async () => {
     extensions: { price_status: "unavailable", option_pricing: [] } })))
   const notice = vi.fn()
   await searchRoundTrips(value, undefined, notice)
-  expect(notice).toHaveBeenCalledWith(expect.stringContaining("best opportunity"), [], [], [], [])
+  expect(notice).toHaveBeenCalledWith(expect.stringContaining("best opportunity"), [], [], [], [], false)
 })
 
 test("delivers estimate-only routes instead of treating them as empty results", async () => {
-  const estimate = { rank: 1, cities: [{ id: "a", name: "Home" }, { id: "b", name: "Riga" }, { id: "c", name: "Tallinn" }, { id: "a", name: "Home" }], departure_date: "2030-01-02", return_date: "2030-01-04", total_price: { amount: "30.50", currency: "EUR" }, schedule_source: "reference" }
+  const estimate = { rank: 1, cities: [{ id: "a", name: "Home" }, { id: "b", name: "Riga" }, { id: "c", name: "Tallinn" }, { id: "a", name: "Home" }], departure_date: "2030-01-02", return_date: "2030-01-04", total_price: { amount: "30.50", currency: "EUR" }, transport_types: ["TRAINS" as const, "TRAINS" as const, "TRAINS" as const], schedule_source: "reference" }
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ data: { round_trip_options: [] }, extensions: { estimated_routes: [estimate], price_status: "unavailable" } })))
   const notice = vi.fn()
   await searchRoundTrips(value, undefined, notice)
-  expect(notice).toHaveBeenCalledWith(expect.stringContaining("remain estimates"), [], [], [estimate], [])
+  expect(notice).toHaveBeenCalledWith(expect.stringContaining("remain estimates"), [], [], [estimate], [], false)
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ data: { round_trip_options: [] }, extensions: { estimated_routes: [{ ...estimate, total_price: { amount: "NaN", currency: "EUR" } }] } })))
   await expect(searchRoundTrips(value)).rejects.toThrow("invalid estimated routes")
+})
+
+test.each([true, false, undefined, "true"])("passes strict cache metadata (%s)", async (cached) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    data: { round_trip_options: [] }, extensions: { provider_results_cached: cached },
+  }))))
+  const notice = vi.fn()
+  await searchRoundTrips(value, undefined, notice)
+  expect(notice).toHaveBeenCalledWith("", [], [], [], [], cached === true)
+})
+
+test.each([[], ["TRAINS"], ["TRAINS", "ROCKET", "BUSSES"]].map(transport_types => ({ transport_types })))("rejects inconsistent estimated transport types ($transport_types)", async ({ transport_types }) => {
+  const estimate = {
+    rank: 1, cities: ["Paris", "Berlin", "Rome", "Paris"].map(name => ({ id: name, name })),
+    departure_date: "2030-01-01", return_date: "2030-01-04",
+    total_price: { amount: "30", currency: "EUR" }, schedule_source: "reference", transport_types,
+  }
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ data: { round_trip_options: [] }, extensions: { estimated_routes: [estimate] } })))
+  await expect(searchRoundTrips(value)).rejects.toThrow("invalid estimated routes")
+})
+
+test("sends only the selected transport types for route estimation", () => {
+  expect(toRoundTripInput({ ...value, modes: ["TRAINS", "BUSSES"] }).transport_types).toEqual(["TRAINS", "BUSSES"])
+})
+
+test.each([undefined, null])("accepts older estimated routes without transport types (%s)", async (transport_types) => {
+  const estimate = {
+    rank: 1, cities: ["Paris", "Berlin", "Rome", "Paris"].map(name => ({ id: name, name })),
+    departure_date: "2030-01-01", return_date: "2030-01-04",
+    total_price: { amount: "30", currency: "EUR" }, schedule_source: "reference", transport_types,
+  }
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ data: { round_trip_options: [] }, extensions: { estimated_routes: [estimate] } })))
+  const notice = vi.fn()
+  await searchRoundTrips(value, undefined, notice)
+  expect(notice.mock.calls[0][3]).toEqual([estimate])
 })

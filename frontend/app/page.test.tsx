@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { highlightTimeline } from "@/lib/europe-route-wave"
 
 import Home from "./page"
+import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 
 // Sample trip: Vilnius > Riga > Tallinn > Vilnius, i.e. four stops.
 const SHOWCASE_MS = highlightTimeline([[0, 0], [1, 1], [2, 2], [3, 3]]).endMs
@@ -14,18 +15,21 @@ vi.mock("@/components/europe-loader", () => ({
     satellite,
     highlight,
     highlightLabels,
+    highlightDurationMs,
     onFlight,
   }: {
     loading: boolean
     satellite: boolean
     highlight?: unknown[]
     highlightLabels?: string[]
+    highlightDurationMs?: number
     onFlight?: (flying: boolean) => void
   }) => (
     <div
       data-testid="loader"
       onClick={() => onFlight?.(true)}
       onDoubleClick={() => onFlight?.(false)}
+      data-duration={highlightDurationMs}
       data-loading={loading}
       data-satellite={satellite}
       data-highlight={highlight?.length ?? 0}
@@ -49,12 +53,12 @@ vi.mock("@/lib/europe-cities", () => ({
   popularEuropeCities: () => Promise.resolve([]),
   searchEuropeCities: () => Promise.resolve([]),
 }))
-const { detectDepartureCity, priceSamples } = vi.hoisted(() => ({
-  priceSamples: vi.fn(() => new Promise<never[]>(() => {})),
+const { detectDepartureCity, searchRoundTrips } = vi.hoisted(() => ({
+  searchRoundTrips: vi.fn< typeof import("@/lib/round-trip-search").searchRoundTrips >(() => new Promise(() => {})),
   detectDepartureCity: vi.fn(() => Promise.resolve(null as unknown)),
 }))
 vi.mock("@/lib/ip-origin", () => ({ detectDepartureCity }))
-vi.mock("@/lib/sample-forecast", () => ({ priceSamples }))
+vi.mock("@/lib/round-trip-search", () => ({ searchRoundTrips }))
 vi.mock("@/components/trip-inputs", () => ({
   EMPTY_TRIP_INPUTS: { travelers: 3 },
   TripInputs: ({ onSubmit, value }: { onSubmit: (v: { travelers: number }) => void; value: { travelers: number; departure?: { name: string } | null; date?: Date; duration?: string; budget?: string } }) => (
@@ -96,7 +100,10 @@ describe("Home departure from IP", () => {
 })
 
 describe("Home search", () => {
-  beforeEach(() => vi.useFakeTimers())
+  beforeEach(() => {
+    vi.useFakeTimers()
+    searchRoundTrips.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve(SAMPLE_OPTIONS.slice(0, 1)), 10000)))
+  })
   afterEach(() => vi.useRealTimers())
 
   test("shows everything while idle", () => {
@@ -136,7 +143,7 @@ describe("Home search", () => {
 
     // Search finished: the map zooms onto the path, clouds stay as they were.
     await act(async () => void vi.advanceTimersByTime(10000))
-    expect(screen.queryByText("Results")).toBeNull()
+    expect(screen.getByTestId("page-content")).toHaveAttribute("inert")
     expect(dense()).toBe("false")
 
     await act(async () => void vi.advanceTimersByTime(SHOWCASE_MS))
@@ -161,14 +168,14 @@ describe("Home search", () => {
 
   test("hides everything but the map while searching, then restores the page with results", async () => {
     let finish: ((value: never[]) => void) | undefined
-    priceSamples.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    searchRoundTrips.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
     render(<Home />)
     fireEvent.click(screen.getByText("Search"))
     const content = screen.getByTestId("page-content")
     expect(content).toHaveAttribute("inert")
     expect(content).toHaveClass("opacity-0")
     expect(screen.getByTestId("loader")).toHaveAttribute("data-loading", "true")
-    expect(screen.queryByText("Results")).toBeNull()
+    expect(screen.getByTestId("page-content")).toHaveAttribute("inert")
 
     await act(async () => { finish?.([]) })
     expect(content).not.toHaveAttribute("inert")
@@ -183,19 +190,56 @@ describe("Home search", () => {
     const content = screen.getByTestId("page-content")
     expect(screen.getByTestId("loader")).toHaveAttribute("data-highlight", "4")
     expect(content).toHaveAttribute("inert")
-    expect(screen.queryByText("Results")).toBeNull()
+    expect(screen.getByTestId("page-content")).toHaveAttribute("inert")
 
     await act(async () => void vi.advanceTimersByTime(SHOWCASE_MS - 1))
-    expect(screen.queryByText("Results")).toBeNull()
+    expect(screen.getByTestId("page-content")).toHaveAttribute("inert")
     await act(async () => void vi.advanceTimersByTime(1))
     expect(screen.getByText("Results")).toBeInTheDocument()
 
     // A new search hides the results again and waits again.
     fireEvent.click(screen.getByText("Search"))
     await act(async () => void vi.advanceTimersByTime(10000))
-    expect(screen.queryByText("Results")).toBeNull()
+    expect(screen.getByTestId("page-content")).toHaveAttribute("inert")
     await act(async () => void vi.advanceTimersByTime(SHOWCASE_MS))
     expect(screen.getByText("Results")).toBeInTheDocument()
+  })
+
+  test("shows search notices below the travel results", async () => {
+    const message = "The search reached a result or exploration limit. Narrow the dates or transport modes for a more focused search."
+    searchRoundTrips.mockImplementationOnce(async (_value, _signal, notice) => {
+      notice?.(message, [], [], [], [], false)
+      return []
+    })
+    render(<Home />)
+    fireEvent.click(screen.getByText("Search"))
+    await act(async () => {})
+    const results = screen.getByText("Results")
+    const notice = screen.getByText(message)
+    expect(notice).toHaveTextContent(message)
+    expect(results.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  test("cached results use a four-second showcase and the next live search resets it", async () => {
+    searchRoundTrips.mockImplementationOnce(async (_value, _signal, notice) => {
+      notice?.("", ["provider_advertised"], [], [], [1], true)
+      return SAMPLE_OPTIONS.slice(0, 1)
+    })
+    render(<Home />)
+    fireEvent.click(screen.getByText("Search"))
+    await act(async () => {})
+    expect(screen.getByTestId("loader")).toHaveAttribute("data-duration", "4000")
+    await act(async () => void vi.advanceTimersByTime(3999))
+    expect(screen.getByTestId("page-content")).toHaveAttribute("inert")
+    await act(async () => void vi.advanceTimersByTime(1))
+    expect(screen.getByTestId("page-content")).not.toHaveAttribute("inert")
+    fireEvent.click(screen.getByText("Search"))
+    expect(screen.getByTestId("loader")).not.toHaveAttribute("data-duration")
+    await act(async () => void vi.advanceTimersByTime(10000))
+    await act(async () => void vi.advanceTimersByTime(4000))
+    expect(screen.getByTestId("page-content")).toHaveAttribute("inert")
+    await act(async () => void vi.advanceTimersByTime(SHOWCASE_MS - 4000))
+    expect(screen.getByTestId("page-content")).not.toHaveAttribute("inert")
   })
 
   test("highlights the cheapest trip only after results arrive", async () => {

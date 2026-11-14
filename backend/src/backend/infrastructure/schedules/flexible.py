@@ -113,7 +113,7 @@ class FlexibleSearch:
                 for leg in item[0].path
             )
             unique.setdefault(key, item)
-        candidates = list(unique.values())[:10]
+        candidates = list(unique.values())
         event(
             logging.getLogger(__name__),
             "search.flexible_ranked",
@@ -125,6 +125,7 @@ class FlexibleSearch:
         attempts = 0
         checked = None
         fees_complete = False
+        from_cache = False
         # One instance shares the request/time allowance and cache across attempts.
         catalog = {key: value for item in candidates for key, value in item[3].items()}
         pricer = self.pricer_factory(catalog)
@@ -141,8 +142,11 @@ class FlexibleSearch:
             candidates[index] = (verified, window, markers, catalog, source)
             checked = verified
             fees_complete = quote.fees_complete
+            from_cache = quote.from_cache
             break
-        candidates.sort(key=lambda item: item[0].total_price.amount)
+        # Keep the successfully checked opportunity visible even after fare uplift.
+        candidates.sort(key=lambda item: (item[0] is not checked, item[0].total_price.amount))
+        candidates = candidates[:7]
         options, estimates, pricing = [], [], []
         for rank, (route, window, markers, _, source) in enumerate(candidates, 1):
             if route is checked:
@@ -170,6 +174,7 @@ class FlexibleSearch:
                             "currency": route.total_price.currency,
                         },
                         "schedule_source": source,
+                        "transport_types": [leg.transport_type.value for leg in route.path],
                     }
                 )
         return SearchResponse(
@@ -183,6 +188,7 @@ class FlexibleSearch:
                 "provider_pricing_attempts": attempts,
                 "provider_checked_opportunities": int(checked is not None),
                 "fees_verified": fees_complete,
+                "provider_results_cached": from_cache,
                 "results_limited": limited,
             },
         )

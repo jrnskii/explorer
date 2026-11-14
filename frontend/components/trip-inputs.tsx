@@ -123,14 +123,6 @@ const rangeOption = (from: number, to: number): DurationOption => ({
   label: `${from}-${to} days`,
 })
 
-/** Max digits in the budget field (up to 9999). */
-const MAX_BUDGET_DIGITS = 4
-
-/** Budget suggestions in EUR: 50 to 300 in steps of 50. */
-const BUDGET_SUGGESTIONS = Array.from({ length: 6 }, (_, i) =>
-  String((i + 1) * 50)
-)
-
 /** Picking this clears the field so a number of days can be typed. */
 const CUSTOM_DURATION: DurationOption = {
   value: "custom",
@@ -193,7 +185,6 @@ type TripInputsProps = {
 export function isTripInputsComplete(v: TripInputsValue) {
   return (
     v.departure !== null &&
-    Number(v.budget) > 0 &&
     v.date !== undefined &&
     isValidDuration(v.duration) &&
     v.modes.length > 0
@@ -561,7 +552,7 @@ export function TripInputs({
               <ToggleGroupItem
                               key={mode}
                               value={mode}
-                              className="w-36 rounded-full bg-card hover:bg-muted aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground"
+                              className="w-36 rounded-full border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground aria-pressed:border-input aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:hover:bg-muted aria-pressed:hover:text-foreground"
                             >
                 <Icon />
                 {label}
@@ -573,59 +564,6 @@ export function TripInputs({
             value={value.travelers}
             onChange={(n) => set("travelers", n)}
           /> */}
-          <Combobox
-            items={BUDGET_SUGGESTIONS}
-            filter={null}
-            value={
-              BUDGET_SUGGESTIONS.includes(value.budget) ? value.budget : null
-            }
-            onValueChange={(v) => set("budget", v ?? "")}
-            inputValue={value.budget}
-            onInputValueChange={(v) =>
-              set(
-                "budget",
-                v
-                  .replace(/\D/g, "")
-                  .replace(/^0+/, "")
-                  .slice(0, MAX_BUDGET_DIGITS)
-              )
-            }
-          >
-            <ComboboxInput
-              id={`${id}-budget`}
-              aria-label="Max. budget"
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="Max. budget"
-              className={cn(
-                              "h-8 w-36 rounded-full [&_input]:text-sm [&_input]:font-medium",
-                              value.budget
-                                ? "border-primary bg-primary text-primary-foreground dark:bg-primary [&_input]:text-primary-foreground"
-                                : "bg-card dark:bg-card"
-                            )}
-                            showTrigger={false}
-            >
-              <InputGroupAddon>
-                <InputGroupText
-                  className={cn(
-                    "font-medium",
-                    value.budget ? "text-primary-foreground" : "text-foreground"
-                  )}
-                >
-                  €
-                </InputGroupText>
-              </InputGroupAddon>
-            </ComboboxInput>
-            <ComboboxContent className="min-w-32">
-              <ComboboxList>
-                {(item: string) => (
-                  <ComboboxItem key={item} value={item}>
-                    €{item}
-                  </ComboboxItem>
-                )}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger
@@ -641,7 +579,7 @@ export function TripInputs({
                 <CircleHelp aria-hidden />
               </TooltipTrigger>
               <TooltipContent className="text-sm leading-relaxed">
-                Sample itineraries with estimated fares. Schedules are illustrative, not bookable. Routes without supported pricing are omitted.
+                Search multi-city route ideas and compare estimated fares. Unverified routes are labeled as estimates, not bookable availability.
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

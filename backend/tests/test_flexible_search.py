@@ -82,10 +82,46 @@ class FlexibleSearchTests(TestCase):
             )
         )
 
-    def test_rank_ten_across_three_dates_quote_only_best_and_keep_estimates(self):
+    def test_estimated_prices_and_legs_respect_selected_transport_types(self):
+        self.reference.routes = {
+            origin: [replace(edge, mode=mode) for edge in edges
+                     for mode in (Mode.PLANES, Mode.TRAINS, Mode.BUSSES)]
+            for origin, edges in self.routes.items()
+        }
+        fares = {Mode.PLANES: 100, Mode.TRAINS: 10, Mode.BUSSES: 1}
+        def predict(query):
+            price = Money(Decimal(fares[query.mode]), "EUR")
+            return PriceForecast(price, price, price, "test", "test", 1, None, None, ())
+        self.reference.forecaster.predict.side_effect = predict
+        self.pricer.quote.side_effect = ExactPricingUnavailable("offline")
+        for selected in ((Mode.PLANES,), (Mode.TRAINS,), (Mode.BUSSES,), (Mode.PLANES, Mode.TRAINS)):
+            with self.subTest(selected=selected):
+                self.reference.forecaster.predict.reset_mock()
+                result = self.search(replace(self.settings, transport_types=selected))
+                estimates = result.metadata["estimated_routes"]
+                self.assertTrue(estimates)
+                for estimate in estimates:
+                    modes = [Mode(mode) for mode in estimate["transport_types"]]
+                    self.assertEqual(len(modes), len(estimate["cities"]) - 1)
+                    self.assertTrue(set(modes) <= set(selected))
+                    self.assertEqual(Decimal(estimate["total_price"]["amount"]), sum(fares[mode] for mode in modes))
+                self.assertTrue(all(call.args[0].mode in selected
+                                    for call in self.reference.forecaster.predict.call_args_list))
+
+    def test_cache_metadata_tracks_only_successful_provider_quote(self):
+        for cached in (True, False):
+            with self.subTest(cached=cached):
+                self.pricer.quote.side_effect = lambda route, settings: replace(
+                    self.quote(route, settings), from_cache=cached
+                )
+                self.assertEqual(self.search(self.settings).metadata["provider_results_cached"], cached)
+        self.pricer.quote.side_effect = ExactPricingUnavailable("unavailable")
+        self.assertFalse(self.search(self.settings).metadata["provider_results_cached"])
+
+    def test_rank_seven_across_three_dates_quote_only_best_and_keep_estimates(self):
         result = self.search(self.settings)
         self.assertEqual(len(result.options), 1)
-        self.assertEqual(len(result.metadata["estimated_routes"]), 9)
+        self.assertEqual(len(result.metadata["estimated_routes"]), 6)
         self.factory.assert_called_once()
         self.pricer.quote.assert_called_once()
         self.assertEqual(
@@ -129,11 +165,11 @@ class FlexibleSearchTests(TestCase):
         self.assertEqual(len(result.options), 1)
         self.factory.assert_called_once()
 
-    def test_both_fail_still_show_ten_estimates(self):
+    def test_both_fail_still_show_seven_estimates(self):
         self.pricer.quote.side_effect = ExactPricingUnavailable("secret-provider-token")
         result = self.search(self.settings)
         self.assertEqual(result.options, [])
-        self.assertEqual(len(result.metadata["estimated_routes"]), 10)
+        self.assertEqual(len(result.metadata["estimated_routes"]), 7)
         self.assertEqual(result.metadata["price_status"], "unavailable")
         self.assertEqual(self.pricer.quote.call_count, 2)
         self.assertNotIn("secret-provider-token", json.dumps(result.metadata))
@@ -150,7 +186,7 @@ class FlexibleSearchTests(TestCase):
             self.search(self.settings)
         self.factory.assert_not_called()
 
-    def test_real_price_above_old_budget_is_retained_without_another_check(self):
+    def test_live_fare_uplift_keeps_verified_route_first_without_another_check(self):
         def quote(route, settings):
             original = self.quote(route, settings)
             return replace(
@@ -163,7 +199,10 @@ class FlexibleSearchTests(TestCase):
 
         self.pricer.quote.side_effect = quote
         result = self.search(self.settings)
-        self.assertEqual(result.metadata["option_pricing"][0]["rank"], 10)
+        self.assertEqual(result.metadata["option_pricing"], [{"price_status": "provider_advertised", "rank": 1}])
+        self.assertEqual(len(result.options), 1)
+        self.assertEqual(len(result.metadata["estimated_routes"]), 6)
+        self.assertEqual(Decimal(result.options[0]["total_price"]["amount"]), Decimal(2997))
         self.pricer.quote.assert_called_once()
 
     def test_calendar_windows_cross_dst_and_year_boundary(self):
@@ -293,5 +332,5 @@ class FlexibleSearchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertNotIn("errors", payload)
-        self.assertEqual(len(payload["extensions"]["estimated_routes"]), 10)
+        self.assertEqual(len(payload["extensions"]["estimated_routes"]), 7)
         self.assertEqual(payload["data"]["round_trip_options"], [])

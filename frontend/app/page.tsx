@@ -13,10 +13,9 @@ import {
   TripOpportunities,
 } from "@/components/trip-opportunities"
 import type { RoundTripOption } from "@/generated/schema_v1"
-import { priceSamples } from "@/lib/sample-forecast"
+import { searchRoundTrips, type EstimatedRoute } from "@/lib/round-trip-search"
 import { CloudOverlay } from "@/components/cloud-overlay"
 import { EuropeLoader } from "@/components/europe-loader"
-import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 import { cn } from "@/lib/utils"
 
 import { popularEuropeCities, searchEuropeCities } from "@/lib/europe-cities"
@@ -28,20 +27,6 @@ import {
   stopNames,
   type LonLat,
 } from "@/lib/trip-route"
-
-const CITIES: City[] = [
-  { id: "lon", name: "London", country: "United Kingdom", code: "LON", lat: 51.5074, lon: -0.1278 },
-  { id: "par", name: "Paris", country: "France", code: "PAR" },
-  { id: "ber", name: "Berlin", country: "Germany", code: "BER" },
-  { id: "rom", name: "Rome", country: "Italy", code: "ROM" },
-  { id: "mad", name: "Madrid", country: "Spain", code: "MAD" },
-  { id: "bcn", name: "Barcelona", country: "Spain", code: "BCN", lat: 41.3874, lon: 2.1686 },
-  { id: "ams", name: "Amsterdam", country: "Netherlands", code: "AMS" },
-  { id: "vno", name: "Vilnius", country: "Lithuania", code: "VNO" },
-  { id: "prg", name: "Prague", country: "Czechia", code: "PRG" },
-  { id: "nyc", name: "New York", country: "United States", code: "NYC", lat: 40.7128, lon: -74.006 },
-  { id: "tyo", name: "Tokyo", country: "Japan", code: "TYO", lat: 35.6762, lon: 139.6503 },
-]
 
 // Stable reference: CityPicker re-runs its search effect when this changes.
 const searchDeparture = (query: string) => searchEuropeCities(query)
@@ -57,6 +42,7 @@ const VIGNETTE =
 const DEFAULT_START_OFFSET_DAYS = 2
 const DEFAULT_DURATION = "3"
 const DEFAULT_BUDGET = "200"
+const CACHED_SHOWCASE_MS = 4000
 
 /** Local midnight, `days` days after today. */
 function startDateFromToday(days: number, now = new Date()) {
@@ -72,6 +58,10 @@ export default function Home() {
   const [searchedTravelers, setSearchedTravelers] = useState(1)
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [options, setOptions] = useState<RoundTripOption[]>([])
+  const [estimatedRoutes, setEstimatedRoutes] = useState<EstimatedRoute[]>([])
+  const [verifiedIndex, setVerifiedIndex] = useState<number>()
+  const [fromCache, setFromCache] = useState(false)
+  const [notice, setNotice] = useState("")
   const [error, setError] = useState("")
   const [flying, setFlying] = useState(false)
   // Each search gets a number; its results show once the route showcase ends.
@@ -90,8 +80,19 @@ export default function Home() {
     setStatus("loading")
     setError("")
     setOptions([])
+    setEstimatedRoutes([])
+    setNotice("")
+    setVerifiedIndex(undefined)
+    setFromCache(false)
     try {
-      const estimates = await priceSamples(SAMPLE_OPTIONS, value, controller.signal)
+      const estimates = await searchRoundTrips(value, controller.signal, (message, statuses, _budgets, routes, _ranks, cached) => {
+        if (controller.signal.aborted) return
+        const verified = statuses.indexOf("provider_advertised")
+        setVerifiedIndex(verified >= 0 ? verified : undefined)
+        setNotice(message)
+        setEstimatedRoutes(routes)
+        setFromCache(cached === true)
+      })
       if (controller.signal.aborted) return
       setOptions(estimates)
       setStatus("done")
@@ -137,9 +138,12 @@ export default function Home() {
 
   // Glowing path of the cheapest option, once its stops are placed on the map.
   const cheapestStops = useMemo(() => {
+    if (verifiedIndex !== undefined && options[verifiedIndex]) return stopNames(options[verifiedIndex])
     const cheapest = cheapestOption(options)
+    const estimate = estimatedRoutes[0]
+    if (estimate && (!cheapest || Number(estimate.total_price.amount) < Number(cheapest.total_price.amount))) return estimate.cities.map(city => city.name)
     return cheapest ? stopNames(cheapest) : []
-  }, [options])
+  }, [options, estimatedRoutes, verifiedIndex])
   const departure = trip.departure
   const highlightKey = `${departure?.name ?? ""}|${cheapestStops.join(">")}`
   const [located, setLocated] = useState<{ key: string; points: LonLat[] } | null>(
@@ -158,17 +162,19 @@ export default function Home() {
   const highlight =
     status === "done" && located?.key === highlightKey ? located.points : undefined
 
+  const highlightDurationMs = fromCache ? CACHED_SHOWCASE_MS : undefined
+
   // The results wait while the white path is on screen on its own. Without a
   // path (stops not found) there is nothing to wait for.
   useEffect(() => {
     if (!highlight) return
-    // The path zooms in, draws, then fades for 3 s; only then do the results show.
+    // Reveal results when the same timeline used by the map finishes.
     const timer = setTimeout(
       () => setRevealedSearch(searchNumber),
-      highlightTimeline(highlight).endMs
+      highlightTimeline(highlight, highlightDurationMs).endMs
     )
     return () => clearTimeout(timer)
-  }, [highlight, searchNumber])
+  }, [highlight, highlightDurationMs, searchNumber])
   const showcasing = highlight !== undefined && revealedSearch !== searchNumber
   const hidden = status === "loading" || showcasing
 
@@ -180,6 +186,7 @@ export default function Home() {
         departure={trip.departure}
         loading={status === "loading"}
         highlight={highlight}
+        highlightDurationMs={highlightDurationMs}
         highlightLabels={highlight ? cheapestStops : undefined}
         onFlight={setFlying}
         satellite
@@ -224,7 +231,7 @@ export default function Home() {
         <TripInputs
           value={trip}
           onChange={setTrip}
-          cities={CITIES}
+          cities={popular ?? []}
           onSearchDeparture={searchDeparture}
           departureSuggestions={popular}
           loading={status === "loading"}
@@ -234,10 +241,13 @@ export default function Home() {
         {status === "done" && (
           <TripOpportunities
             options={options}
+            estimatedRoutes={estimatedRoutes}
+            verifiedIndex={verifiedIndex}
             travelers={searchedTravelers}
-            priceScope="party"
+            priceScope="adult"
           />
         )}
+        {status === "done" && notice && <p role="status">{notice}</p>}
         </main>
       </div>
     </>

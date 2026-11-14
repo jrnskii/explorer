@@ -7,6 +7,8 @@ import { cheapestOption, locateStops, stopNames } from "./trip-route"
 const leg = (from: string, to: string) => ({
   from,
   to,
+  from_city: { id: from, name: from, latitude: 0, longitude: 0 },
+  to_city: { id: to, name: to, latitude: 0, longitude: 0 },
   departure_at: "2026-12-04T07:00:00Z",
   arrival_at: "2026-12-04T09:00:00Z",
   time_in_travel: 7200,
@@ -55,6 +57,16 @@ describe("stopNames", () => {
       "Tallinn",
       "Vilnius",
     ])
+  })
+
+  test("uses city names rather than canonical IDs for map stops", async () => {
+    const trip = option("10", "EUR", "Vilnius", "Riga", "Vilnius")
+    const coded = { ...trip, path: trip.path.map((leg, index) => ({
+      ...leg, from: `gn-${index}`, to: `gn-${index + 1}`,
+    })) }
+    const names = stopNames(coded)
+    expect(names).toEqual(["Vilnius", "Riga", "Vilnius"])
+    expect(await locateStops(names, null, async () => [])).toHaveLength(3)
   })
 
   test("is empty for an empty path", () => {

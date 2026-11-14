@@ -1,7 +1,8 @@
 """Forecast -> one provider route -> transparent ranking calibration, offline."""
 
+from contextlib import nullcontext
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, localcontext
 import json
 from pathlib import Path
@@ -20,6 +21,7 @@ from backend.domain.pricing import (
     ExactPricingUnavailable,
 )
 from backend.domain.travel import TransportType
+from backend.infrastructure.scrappa.best_route import BestRoutePricer
 from backend.infrastructure.scrappa.client import ScrappaClient
 from backend.infrastructure.scrappa.exact_pricing import ScrappaRoundTripPricer
 
@@ -320,6 +322,71 @@ class AdapterTests(unittest.TestCase):
                 search_id=params["search_id"], trip=self.service(params["trip_id"]), currency="USD"
             )
         return 200, json.dumps(dict(success=True, data=data))
+
+    def test_best_route_reuses_provider_cache_until_one_hour_expiry(self):
+        def transport(url, key, timeout):
+            if urlparse(url).path.endswith("/places"):
+                name = parse_qs(urlparse(url).query)["query"][0]
+                return 200, json.dumps(dict(success=True, data=dict(results=[dict(
+                    type="location", position_id=1 if name == "City A" else 2,
+                    name=name, country_code="LT",
+                )])))
+            return self.transport(url, key, timeout)
+
+        self.client.transport = Mock(side_effect=transport)
+
+        def search():
+            # Each application request creates a new pricer using the shared cache.
+            pricer = BestRoutePricer(
+                {name: {"name": "City " + name, "country": "LT"} for name in ("A", "B")},
+                database="unused", api_key="test",
+                client_factory=lambda *a, **kw: nullcontext(self.client),
+            )
+            return find_round_trips(settings(), routes()[:2], exact_pricer=pricer)
+
+        first = search()
+        self.assertEqual(first.pricing.status, "provider_priced")
+        self.assertEqual(self.client.transport.call_count, 6)
+        self.client.clock = lambda: NOW + timedelta(minutes=59)
+        cached = search()
+        self.assertEqual(cached.pricing.status, "provider_priced")
+        self.assertEqual(cached.pricing.response_ids, first.pricing.response_ids)
+        self.assertEqual(self.client.transport.call_count, 6)
+        self.client.clock = lambda: NOW + timedelta(hours=1)
+        refreshed = search()
+        self.assertEqual(refreshed.pricing.status, "provider_priced")
+        self.assertNotEqual(refreshed.pricing.response_ids, first.pricing.response_ids)
+        self.assertEqual(self.client.transport.call_count, 10)
+
+    def test_quote_cache_flag_requires_every_search_and_trip_to_be_cached(self):
+        option = find_round_trips(settings(), routes()[:2]).options[0]
+        self.assertFalse(self.pricer.quote(option, settings()).from_cache)
+        self.assertTrue(self.pricer.quote(option, settings()).from_cache)
+        self.client.db.execute("DELETE FROM responses WHERE endpoint='trip'")
+        self.assertFalse(self.pricer.quote(option, settings()).from_cache)
+        self.assertTrue(self.pricer.quote(option, settings()).from_cache)
+        self.client.db.execute("DELETE FROM responses WHERE endpoint='search'")
+        self.assertFalse(self.pricer.quote(option, settings()).from_cache)
+
+    def test_live_refresh_bypasses_cached_search_and_trip_responses(self):
+        first = find_round_trips(settings(), routes(), exact_pricer=self.pricer)
+        self.assertEqual(first.pricing.status, "provider_priced")
+        self.assertEqual(len(self.calls), 4)
+        self.pricer.refresh = True
+        second = find_round_trips(settings(), routes(), exact_pricer=self.pricer)
+        self.assertEqual(second.pricing.status, "provider_priced")
+        self.assertEqual(len(self.calls), 8)
+
+    def test_live_failure_does_not_fall_back_to_cached_success(self):
+        first = find_round_trips(settings(), routes()[:2], exact_pricer=self.pricer)
+        self.assertEqual(first.pricing.status, "provider_priced")
+        self.pricer.refresh = True
+        self.client.transport = Mock(return_value=(503, '{"success":false}'))
+        second = find_round_trips(settings(), routes()[:2], exact_pricer=self.pricer)
+        self.assertEqual(second.pricing.status, "unavailable")
+        self.assertEqual([option.price_status for option in second.options], ["estimated"])
+        self.assertEqual(second.options[0].total_price.amount, Decimal("20"))
+        self.client.transport.assert_called_once()
 
     def test_cache_and_observations_reuse_original_provenance(self):
         first = find_round_trips(settings(), routes(), exact_pricer=self.pricer)

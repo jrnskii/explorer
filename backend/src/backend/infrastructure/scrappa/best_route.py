@@ -29,16 +29,11 @@ class BestRoutePricer:
         *,
         database,
         api_key,
-        cache_only=False,
         client_factory=ScrappaClient,
         timeout=180
     ):
         self.cities, self.database, self.api_key = cities, Path(database), api_key
-        self.cache_only, self.client_factory, self.timeout = (
-            cache_only,
-            client_factory,
-            timeout,
-        )
+        self.client_factory, self.timeout = client_factory, timeout
         self._deadline = None
         self._network_calls = 0
 
@@ -86,7 +81,6 @@ class BestRoutePricer:
                     payload = client.request(
                         "places",
                         {"query": record["name"], "locale": "en"},
-                        cache_only=self.cache_only,
                     ).payload
                     results = payload["data"].get("results")
                     if not isinstance(results, list):
@@ -116,8 +110,9 @@ class BestRoutePricer:
                     client,
                     ids,
                     cities=self.cities,
-                    cache_only=self.cache_only,
                     min_connection_seconds=1800,
+                    # Reuse identical provider responses within the one-hour TTL.
+                    refresh=False,
                 ).quote(option, settings)
         except ExactPricingUnavailable:
             raise
@@ -135,5 +130,4 @@ def configured_pricer(cities):
         cities,
         database=os.environ.get("SCRAPPA_CACHE_PATH", "backend/data/scrappa.duckdb"),
         api_key=os.environ.get("SCRAPPA_API_KEY"),
-        cache_only=os.environ.get("SCRAPPA_CACHE_ONLY") == "1",
     )

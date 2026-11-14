@@ -22,6 +22,10 @@ export function prepareSamples(options: RoundTripOption[], input: TripInputsValu
         arrival_at: new Date(Date.parse(leg.arrival_at) + shift).toISOString(),
       })) }
     }).filter((option) => {
+      const cityIds = [option.path[0].from_city.id, ...option.path.map((leg) => leg.to_city.id)]
+      const intermediate = cityIds.slice(0, -1)
+      if (cityIds.at(-1) !== cityIds[0] || intermediate.length < 3 ||
+          new Set(intermediate).size !== intermediate.length) return false
       const visits = new Set(option.path.map((leg) => leg.to_city.name))
       const stops = [...visits].filter((city) => city !== input.departure?.name)
       return option.path.every((leg) => input.modes.includes(leg.transport_type)) &&
@@ -40,14 +44,16 @@ export async function priceSamples(options: RoundTripOption[], input: TripInputs
     origin_country: COUNTRIES[leg.from_city.name], destination_country: COUNTRIES[leg.to_city.name],
     departure_date: leg.departure_at.slice(0, 10), travelers: input.travelers,
   })))
-  const budget = moneyCents(input.budget)
   const estimates = await fetchFareEstimates(queries, signal)
   const priced = applyFareEstimates(candidates, estimates)
-  return priced.filter((option) => moneyCents(option.total_price.amount) <= budget)
+  return priced.sort((a, b) => {
+    const difference = moneyCents(a.total_price.amount) - moneyCents(b.total_price.amount)
+    return difference < 0 ? -1 : difference > 0 ? 1 : 0
+  }).slice(0, 7)
 }
 
 function moneyCents(value: string): bigint {
-  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) throw new Error("Enter a valid EUR budget with at most two decimal places.")
+  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) throw new Error("Enter a valid EUR amount with at most two decimal places.")
   const [whole, fraction = ""] = value.split(".")
   return BigInt(whole) * BigInt(100) + BigInt(fraction.padEnd(2, "0"))
 }

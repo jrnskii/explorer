@@ -35,16 +35,23 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Route search
+
+The home page requests `/api/round-trip` with the selected city's GeoNames ID,
+dates and transport modes. Configure `BACKEND_GRAPHQL_URL` and
+`APP_ACCESS_TOKEN` on the frontend server and run the backend search service.
+The service explores three nearby departure dates and ranks multi-city routes.
+The page displays up to seven results, placing the provider-verified opportunity first and sorting the remaining estimates by price, including clearly labeled
+route estimates when live fare verification is unavailable. Estimates have no
+invented departure times or booking links. Prices are per adult; the current
+search contract supports one adult. Genuine coverage gaps may return fewer
+results, and service failures are displayed as errors.
+
 ## Local fare forecasts
 
-The page requests `/api/pricing` to price its **sample itineraries**, replacing the
-preview price constants. Dates shift to the selected calendar day; home, modes,
-budget, stops and stay constraints filter the samples. Flexible-date exploration
-is unsupported and returns a visible message. This remains a sample-itinerary
-demonstration, not a full schedule search or booking service. An itinerary is
-omitted if any independent one-way demo ticket lacks a forecast. Estimated totals
-include travelers once. Backend arithmetic uses decimals; browser ticket sums and
-budget comparisons use integer cents.
+The demo's `/api/pricing` endpoint prices sample itineraries. It is independent
+of the home page's route search. Sample routes reject repeated cities and simple
+out-and-back trips; fares use integer cents for arithmetic and ranking.
 
 From the repository root run `just extract-pricing`, `just train-pricing`, and
 `uv sync --project backend --locked` before starting the frontend. The Node server
@@ -64,3 +71,15 @@ Run `bun run --cwd frontend test` from the repository root. The minimal setup us
 Vitest, React Testing Library and jsdom. Tests cover loading, errors,
 recovery, empty coverage, estimate validation, filtering, exact sums, party totals
 and API input limits.
+
+Cached Scrappa/Omio results use a four-second map showcase (zoom, route drawing,
+and fade) before revealing results. The backend sets `provider_results_cached`
+only when every search and trip-detail response for the verified option came
+from cache; live or mixed responses keep the normal path-based duration.
+
+Estimated routes retain one `transport_types` entry per leg, in city order.
+The estimator filters to selected modes and uses each leg's mode-specific fare
+forecast; cards show those planned modes without implying verified availability.
+
+Older estimated-route responses without transport types remain displayable;
+their leg details show “Transport unverified” until mode data is available.

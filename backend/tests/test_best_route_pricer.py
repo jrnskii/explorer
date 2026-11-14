@@ -6,7 +6,9 @@ from unittest.mock import Mock, patch
 
 from backend.domain.travel import TransportType
 from backend.domain.pricing import ExactPricingUnavailable
-from backend.infrastructure.scrappa.best_route import BestRoutePricer
+from backend.infrastructure.scrappa.best_route import BestRoutePricer, configured_pricer
+from backend.infrastructure.graphql.search import configured_search
+from backend.infrastructure.schedules.store import SearchUnavailable
 
 
 class BestRoutePricerTests(TestCase):
@@ -80,6 +82,7 @@ class BestRoutePricerTests(TestCase):
             )
             self.assertEqual(factory.call_args.args[1], {"gn-1": 1, "gn-2": 2})
             self.assertEqual(factory.call_args.kwargs["min_connection_seconds"], 1800)
+            self.assertFalse(factory.call_args.kwargs["refresh"])
 
     def test_ambiguous_place_failure_does_not_quote_or_try_another_route(self):
         self.client.request.side_effect = None
@@ -125,3 +128,22 @@ class BestRoutePricerTests(TestCase):
             with self.assertRaises(ExactPricingUnavailable):
                 transports[0]("url", "key", 60)
             http.assert_not_called()
+
+    def test_application_pricer_ignores_legacy_cache_only_environment(self):
+        with patch.dict("os.environ", {"SCRAPPA_CACHE_ONLY": "1", "SCRAPPA_API_KEY": "unit-key"}):
+            pricer = configured_pricer(self.cities)
+        pricer.client_factory = lambda *a, **kw: self.client
+        with patch("backend.infrastructure.scrappa.best_route.ScrappaRoundTripPricer") as factory:
+            pricer.quote(self.option, "settings")
+            self.assertFalse(factory.call_args.kwargs["refresh"])
+            self.assertFalse(factory.call_args.kwargs.get("cache_only", False))
+
+    def test_cache_only_environment_cannot_bypass_required_live_credentials(self):
+        for key in ("", " ", "change_in_prod"):
+            with self.subTest(key=key), patch.dict("os.environ", {
+                "SCHEDULE_SNAPSHOT_PATH": "unused",
+                "SCRAPPA_CACHE_ONLY": "1",
+                "SCRAPPA_API_KEY": key,
+            }):
+                with self.assertRaisesRegex(SearchUnavailable, "SCRAPPA_API_KEY is required"):
+                    configured_search()

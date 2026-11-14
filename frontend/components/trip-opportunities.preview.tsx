@@ -82,5 +82,9 @@ export const SAMPLE_OPTIONS: RoundTripOption[] = SAMPLE_ROUTES.map((option) => {
 })
 
 export default function TripOpportunitiesPreview() {
-  return <TripOpportunities options={SAMPLE_OPTIONS} />
+  return <TripOpportunities options={SAMPLE_OPTIONS} estimatedRoutes={[{
+    rank: 1, cities: ["Paris", "Berlin", "Rome", "Paris"].map(name => ({ id: name, name })),
+    departure_date: "2030-01-01", return_date: "2030-01-04",
+    total_price: { amount: "40.00", currency: "EUR" }, transport_types: ["TRAINS" as const, "TRAINS" as const, "TRAINS" as const], schedule_source: "reference",
+  }]} />
 }

@@ -1353,8 +1353,14 @@ Logs also go to stderr. The optional file rotates at 5 MB with three backups;
 `backend_request_id` in the frontend server's `search.upstream_response` log.
 The proxy logs status and latency, not input payloads, URLs, or credentials.
 Backend diagnostics select explicit fields and never log raw provider payloads
-or exception messages. Set `SCRAPPA_CACHE_ONLY=1` for diagnostic replays that must
-not make paid requests (a missing or stale cached response then fails explicitly).
+or exception messages. Application search reuses Scrappa/Omio search and trip-detail
+responses for identical provider inputs for up to one hour. Cache misses and
+expired responses trigger live requests; failed requests never fall back to
+stale fares or timetables. The first provider-verified opportunity therefore
+always uses provider-sourced data. `SCRAPPA_CACHE_ONLY=1` does not disable live
+fetches in application search, and a valid `SCRAPPA_API_KEY` is required.
+City-ID lookups also reuse their existing cache. For offline diagnostic replays, use the CLI commands with their explicit
+`--cache-only` flag (a missing or stale cached response then fails explicitly).
 
 `just api` serves the shared SDL at `POST /graphql`, with
 `Authorization: Bearer <APP_ACCESS_TOKEN>` required. The configured search reads a
@@ -1407,3 +1413,8 @@ price strings and schedule source; these are not bookable timetables.
 `extensions.option_pricing`. Both failed checks still return the estimates.
 Exploration limits and unsupported datasets mean this is not a guarantee of the
 cheapest possible trip across all providers.
+
+The flexible web search refreshes provider search and trip data for the best
+estimated route (or the second candidate if verification fails). A successful
+verified route stays first even if its live fare exceeds other estimates; the
+remaining six estimates stay price-ordered. Cache-only mode remains offline.
