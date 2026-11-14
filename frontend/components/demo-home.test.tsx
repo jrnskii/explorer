@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
-import { DEMO_SHOWCASE_MS } from "@/lib/demo-trips"
+import { DEMO_SEARCH_MS, DEMO_SHOWCASE_MS } from "@/lib/demo-trips"
 
 import { DemoHome } from "./demo-home"
 
@@ -56,7 +56,7 @@ describe("DemoHome", () => {
     fireEvent.click(screen.getByText("Search"))
     expect(screen.getByTestId("loader")).toHaveAttribute("data-loading", "true")
 
-    await act(async () => void vi.advanceTimersByTime(600))
+    await act(async () => void vi.advanceTimersByTime(DEMO_SEARCH_MS))
     const loader = screen.getByTestId("loader")
     expect(loader).toHaveAttribute("data-highlight", "6")
     expect(loader).toHaveAttribute("data-labels", "Vilnius>Warsaw>Berlin>Stockholm>Riga>Vilnius")
@@ -74,7 +74,7 @@ describe("DemoHome", () => {
   test("highlights the Vilnius round trip as the best match and labels the data as demo", async () => {
     render(<DemoHome />)
     fireEvent.click(screen.getByText("Search"))
-    await act(async () => void vi.advanceTimersByTime(600 + DEMO_SHOWCASE_MS))
+    await act(async () => void vi.advanceTimersByTime(DEMO_SEARCH_MS + DEMO_SHOWCASE_MS))
     const featured = document.querySelectorAll('[data-featured="true"]')
     expect(featured).toHaveLength(1)
     expect(featured[0]).toHaveTextContent("Best match")

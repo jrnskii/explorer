@@ -40,6 +40,9 @@ export type PlannedRoute = {
   beamMs: number
   /** Time until the beam head reaches the destination (the route is fully drawn). */
   drawMs: number
+  /** Indices into the point list; set for cascade routes. */
+  fromIndex?: number
+  toIndex?: number
 }
 
 /**
@@ -132,6 +135,16 @@ export function planCascade(
   phase = 0,
   branching: readonly number[] = CASCADE_BRANCHING
 ): PlannedRoute[] {
+  return planCascadeFrom(points, [start], phase, branching)
+}
+
+/** Like `planCascade`, but fans out from several cities at once (all starting at 0). */
+export function planCascadeFrom(
+  points: readonly LonLat[],
+  starts: readonly number[],
+  phase = 0,
+  branching: readonly number[] = CASCADE_BRANCHING
+): PlannedRoute[] {
   const routes: PlannedRoute[] = []
   const expand = (
     city: number,
@@ -150,14 +163,38 @@ export function planCascade(
         key: `${depth}:${city}>${target}@${routes.length}`,
         from,
         to,
+        fromIndex: city,
+        toIndex: target,
         ...timing(from, to, MAX_PREFERRED_DISTANCE, startMs),
       }
       routes.push(route)
       expand(target, startMs + route.drawMs + 20, depth + 1, new Set([...path, target]))
     })
   }
-  expand(start, 0, 0, new Set([start]))
+  starts.forEach((start, i) => expand(start, i * STAGGER_MS, 0, new Set([start])))
   return routes
+}
+
+/** Time until the last route of a plan has fully drawn, i.e. every beam has arrived. */
+export function arrivalMs(routes: readonly PlannedRoute[]) {
+  return Math.max(0, ...routes.map((r) => r.startMs + r.drawMs))
+}
+
+/**
+ * Cities the plan ended in: destinations nothing continues from. At most `max`,
+ * spread evenly so the next wave still fans out across the map.
+ */
+export function frontierCities(routes: readonly PlannedRoute[], max = 3): number[] {
+  const departed = new Set(routes.map((r) => r.fromIndex))
+  const leaves = [
+    ...new Set(
+      routes.flatMap((r) =>
+        r.toIndex !== undefined && !departed.has(r.toIndex) ? [r.toIndex] : []
+      )
+    ),
+  ]
+  if (leaves.length <= max) return leaves
+  return Array.from({ length: max }, (_, i) => leaves[Math.floor((i * leaves.length) / max)])
 }
 
 /** Time from the start of a round until its last route has faded out. */

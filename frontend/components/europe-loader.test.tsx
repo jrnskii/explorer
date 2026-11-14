@@ -2,9 +2,9 @@ import { act, render } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
-import { HIGHLIGHT_ZOOM_MS } from "@/lib/europe-route-wave"
+import { HIGHLIGHT_ZOOM_MS, highlightTimeline, type LonLat } from "@/lib/europe-route-wave"
 
-import { EuropeLoader } from "./europe-loader"
+import { EuropeLoader, lineOpacity, planConvergence } from "./europe-loader"
 
 // Leaflet needs a real layout engine; replace the map with a linear projection.
 vi.mock("next/dynamic", () => ({
@@ -105,7 +105,7 @@ describe("EuropeLoader route shimmer", () => {
     const { container } = render(<EuropeLoader loading />)
     act(() => void vi.advanceTimersByTime(50))
     const delays = [...lines(container)].map((p) =>
-      parseFloat((p as HTMLElement).parentElement!.style.getPropertyValue("--delay"))
+      parseFloat((p.closest(".eu-life") as HTMLElement).style.getPropertyValue("--delay"))
     )
     expect(Math.max(...delays)).toBeGreaterThan(2000)
     expect(delays.filter((d) => d === 0)).toHaveLength(1)
@@ -252,5 +252,168 @@ describe("EuropeLoader cheapest path", () => {
       <EuropeLoader loading={false} highlight={[stops[0], stops[0], stops[1]]} />
     )
     expect(container.querySelectorAll("[data-testid='cheapest-path'] > g")).toHaveLength(1)
+  })
+})
+
+describe("EuropeLoader endless searching", () => {
+  beforeEach(() => {
+    mockMotion(false)
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  const delays = (container: HTMLElement) =>
+    [...container.querySelectorAll(".eu-draw")].map((p) =>
+      parseFloat((p.closest(".eu-life") as HTMLElement).style.getPropertyValue("--delay"))
+    )
+
+  test("keeps adding routes while searching without ever clearing the map", () => {
+    const { container } = render(<EuropeLoader loading />)
+    act(() => void vi.advanceTimersByTime(50))
+    const seen = new Set(
+      [...container.querySelectorAll(".eu-draw")].map((p) => p.getAttribute("d"))
+    )
+    let sawContinuation = false
+    for (let i = 0; i < 40; i++) {
+      act(() => void vi.advanceTimersByTime(250))
+      const drawn = container.querySelectorAll(".eu-draw")
+      expect(drawn.length).toBeGreaterThan(0)
+      drawn.forEach((p) => {
+        if (!seen.has(p.getAttribute("d"))) sawContinuation = true
+      })
+      expect(drawn.length).toBeLessThanOrEqual(40)
+    }
+    expect(sawContinuation).toBe(true)
+    expect(delays(container).length).toBeGreaterThan(0)
+  })
+})
+
+describe("EuropeLoader convergence on the highlighted path", () => {
+  beforeEach(() => {
+    mockMotion(false)
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  const stops: [number, number][] = [
+    [25.28, 54.69],
+    [21.01, 52.23],
+    [13.4, 52.52],
+    [18.07, 59.33],
+    [24.1, 56.95],
+    [25.28, 54.69],
+  ]
+  const project = ([lon, lat]: readonly [number, number]) => [lon * 10 + 300, 800 - lat * 10]
+  const endOf = (d: string) => {
+    const n = d.match(/-?\d+(\.\d+)?/g)!.map(Number)
+    return [n[n.length - 2], n[n.length - 1]]
+  }
+  const converging = (container: HTMLElement) =>
+    [...container.querySelectorAll(".eu-draw")].filter((p) => !p.closest(".eu-fade-out"))
+
+  test("while zooming, every searching line ends at a city of the highlighted path, evenly", () => {
+    const { container, rerender } = render(<EuropeLoader loading />)
+    act(() => void vi.advanceTimersByTime(3000))
+    rerender(<EuropeLoader loading={false} highlight={stops} highlightLabels={[]} />)
+    act(() => void vi.advanceTimersByTime(50))
+
+    const lines = converging(container)
+    expect(lines.length).toBeGreaterThan(0)
+    const targets = new Set(stops.map((s) => project(s).map((n) => n.toFixed(1)).join(",")))
+    const counts = new Map<string, number>()
+    for (const line of lines) {
+      const end = endOf(line.getAttribute("d")!).map((n) => n.toFixed(1)).join(",")
+      expect(targets.has(end)).toBe(true)
+      counts.set(end, (counts.get(end) ?? 0) + 1)
+    }
+    const values = [...counts.values()]
+    expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1)
+  })
+
+  test("converging lines are drawn during the zoom and fade once it ends", () => {
+    const { container, rerender } = render(<EuropeLoader loading />)
+    act(() => void vi.advanceTimersByTime(3000))
+    rerender(<EuropeLoader loading={false} highlight={stops} highlightDurationMs={5000} />)
+    act(() => void vi.advanceTimersByTime(50))
+    for (const line of converging(container)) {
+      const g = line.closest(".eu-life") as HTMLElement
+      const start = parseFloat(g.style.getPropertyValue("--delay"))
+      const beam = parseFloat(g.style.getPropertyValue("--beam"))
+      expect(start + beam).toBeLessThanOrEqual(highlightTimeline(stops, 5000).zoomMs)
+    }
+  })
+
+  test("without a highlighted path nothing converges", () => {
+    const { container, rerender } = render(<EuropeLoader loading />)
+    act(() => void vi.advanceTimersByTime(3000))
+    rerender(<EuropeLoader loading={false} />)
+    act(() => void vi.advanceTimersByTime(50))
+    expect(converging(container)).toHaveLength(0)
+  })
+
+  test("reduced motion skips the convergence", () => {
+    mockMotion(true)
+    const { container, rerender } = render(<EuropeLoader loading />)
+    act(() => void vi.advanceTimersByTime(100))
+    rerender(<EuropeLoader loading={false} highlight={stops} />)
+    act(() => void vi.advanceTimersByTime(50))
+    expect(converging(container)).toHaveLength(0)
+  })
+})
+
+describe("planConvergence", () => {
+  const origins: LonLat[] = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6]]
+  const stops: LonLat[] = [[10, 10], [11, 11], [12, 12], [10, 10]]
+
+  test("hands the distinct stops out evenly and never ends a line where it starts", () => {
+    const routes = planConvergence(origins, stops, 2000)
+    expect(routes).toHaveLength(origins.length)
+    const counts = new Map<string, number>()
+    routes.forEach((r) => counts.set(r.to.join(","), (counts.get(r.to.join(",")) ?? 0) + 1))
+    expect(counts.size).toBe(3)
+    expect(Math.max(...counts.values()) - Math.min(...counts.values())).toBeLessThanOrEqual(1)
+  })
+
+  test("skips a stop equal to the line's origin and finishes within the zoom", () => {
+    const routes = planConvergence([[10, 10]], stops, 2000)
+    expect(routes).toHaveLength(1)
+    expect(routes[0].to).not.toEqual([10, 10])
+    expect(planConvergence(origins, stops, 2000).every((r) => r.startMs + r.beamMs <= 2000)).toBe(true)
+    expect(planConvergence(origins, [], 2000)).toEqual([])
+  })
+})
+
+describe("searching line style", () => {
+  beforeEach(() => mockMotion(false))
+  afterEach(() => vi.unstubAllGlobals())
+
+  test("lineOpacity is deterministic, within bounds and varies between lines", () => {
+    const values = Array.from({ length: 50 }, (_, i) => lineOpacity(`0|route-${i}`))
+    values.forEach((v) => {
+      expect(v).toBeGreaterThanOrEqual(0.3)
+      expect(v).toBeLessThanOrEqual(1)
+    })
+    expect(new Set(values).size).toBeGreaterThan(10)
+    expect(lineOpacity("0|route-3")).toBe(values[3])
+  })
+
+  test("drawn lines are thicker than the base width and dimmed unevenly", () => {
+    vi.useFakeTimers()
+    const { container } = render(<EuropeLoader loading />)
+    act(() => void vi.advanceTimersByTime(50))
+    vi.useRealTimers()
+    const core = [...container.querySelectorAll(".eu-draw")]
+    expect(core.length).toBeGreaterThan(1)
+    core.forEach((p) => expect(Number(p.getAttribute("stroke-width"))).toBeGreaterThan(1.25))
+    const dims = new Set(
+      [...container.querySelectorAll('[data-testid="search-line"]')].map((g) => g.getAttribute("opacity"))
+    )
+    expect(dims.size).toBeGreaterThan(1)
   })
 })

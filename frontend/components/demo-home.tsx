@@ -14,6 +14,7 @@ import {
 import { TripOpportunities } from "@/components/trip-opportunities"
 import {
   DEMO_OPTIONS,
+  DEMO_SEARCH_MS,
   DEMO_SHOWCASE_MS,
   DEMO_STOP_NAMES,
   DEMO_STOP_POINTS,
@@ -91,8 +92,8 @@ export function DemoHome() {
     setSearchedTravelers(value.travelers)
     setSearchNumber((n) => n + 1)
     setStatus("loading")
-    // A brief "searching" beat, then the scripted result.
-    pending.current = setTimeout(() => setStatus("done"), 600)
+    // The "searching" animation, then the scripted result.
+    pending.current = setTimeout(() => setStatus("done"), DEMO_SEARCH_MS)
   }
 
   const highlight = status === "done" ? DEMO_STOP_POINTS : undefined
