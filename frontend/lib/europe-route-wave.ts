@@ -12,6 +12,12 @@ export const STAGGER_MS = 170
 export const TRAIL = 0.16
 /** How long a finished route stays before it starts to fade. */
 export const HOLD_MS = 225
+/** Duration of the map zoom onto the cheapest path; the path draws after it. */
+export const HIGHLIGHT_ZOOM_MS = 1800
+/** Time each leg of the cheapest path takes to draw. */
+export const HIGHLIGHT_LEG_MS = 700
+/** How long the finished cheapest path takes to fade away; the results appear after. */
+export const HIGHLIGHT_FADE_MS = 3000
 /** Duration of the fade of a finished route. */
 export const ROUTE_FADE_MS = 450
 
@@ -155,6 +161,16 @@ export function planCascade(
 }
 
 /** Time from the start of a round until its last route has faded out. */
+/**
+ * Timeline of the cheapest path: the map zooms, each hop draws in turn, then
+ * the whole path fades.
+ */
+export function highlightTimeline(points: readonly LonLat[]) {
+  const hops = Math.max(0, points.length - 1)
+  const fadeStartMs = HIGHLIGHT_ZOOM_MS + hops * HIGHLIGHT_LEG_MS
+  return { fadeStartMs, endMs: fadeStartMs + HIGHLIGHT_FADE_MS }
+}
+
 export function roundDurationMs(routes: readonly PlannedRoute[]) {
   return Math.max(
     0,

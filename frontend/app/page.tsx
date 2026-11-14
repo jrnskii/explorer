@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import type { City } from "@/components/city-picker"
 import { SiteHeader } from "@/components/site-header"
@@ -16,7 +16,14 @@ import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 import { cn } from "@/lib/utils"
 
 import { popularEuropeCities, searchEuropeCities } from "@/lib/europe-cities"
+import { highlightTimeline } from "@/lib/europe-route-wave"
 import { detectDepartureCity } from "@/lib/ip-origin"
+import {
+  cheapestOption,
+  locateStops,
+  stopNames,
+  type LonLat,
+} from "@/lib/trip-route"
 
 const CITIES: City[] = [
   { id: "lon", name: "London", country: "United Kingdom", code: "LON", lat: 51.5074, lon: -0.1278 },
@@ -54,10 +61,20 @@ function startDateFromToday(days: number, now = new Date()) {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days)
 }
 
+// Clouds thin to this share of their opacity while the map zooms.
+const FLIGHT_CLOUD_DENSITY = 0.75
+
+
 export default function Home() {
   const [trip, setTrip] = useState<TripInputsValue>(EMPTY_TRIP_INPUTS)
   const [searchedTravelers, setSearchedTravelers] = useState(1)
   const [status, setStatus] = useState<"idle" | "loading" | "done">("idle")
+  // Which search (by number) the results have been revealed for.
+  const [searchNumber, setSearchNumber] = useState(0)
+  const [revealedSearch, setRevealedSearch] = useState(0)
+  // True while the map zooms. The full-screen backdrop blur is the costliest
+  // layer to repaint over moving imagery, so it fades out for the flight.
+  const [flying, setFlying] = useState(false)
 
   // Departure auto-complete covers all European cities (lazy-loaded dataset).
   const [popular, setPopular] = useState<City[]>()
@@ -99,6 +116,43 @@ export default function Home() {
     return () => clearTimeout(timer)
   }, [status])
 
+  // Glowing path of the cheapest option, once its stops are placed on the map.
+  const options = SAMPLE_OPTIONS
+  const cheapestStops = useMemo(() => {
+    const cheapest = cheapestOption(options)
+    return cheapest ? stopNames(cheapest) : []
+  }, [options])
+  const departure = trip.departure
+  const highlightKey = `${departure?.name ?? ""}|${cheapestStops.join(">")}`
+  const [located, setLocated] = useState<{ key: string; points: LonLat[] } | null>(
+    null
+  )
+  useEffect(() => {
+    if (status !== "done" || cheapestStops.length === 0) return
+    let cancelled = false
+    locateStops(cheapestStops, departure, searchEuropeCities).then((points) => {
+      if (!cancelled && points) setLocated({ key: highlightKey, points })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [status, cheapestStops, departure, highlightKey])
+  const highlight =
+    status === "done" && located?.key === highlightKey ? located.points : undefined
+
+  // The results wait while the white path is on screen on its own. Without a
+  // path (stops not found) there is nothing to wait for.
+  useEffect(() => {
+    if (!highlight) return
+    // The path zooms in, draws, then fades for 3 s; only then do the results show.
+    const timer = setTimeout(
+      () => setRevealedSearch(searchNumber),
+      highlightTimeline(highlight).endMs
+    )
+    return () => clearTimeout(timer)
+  }, [highlight, searchNumber])
+  const showcasing = highlight !== undefined && revealedSearch !== searchNumber
+  const hidden = status === "loading" || showcasing
 
   return (
     <>
@@ -107,17 +161,24 @@ export default function Home() {
         label="Finding your trip"
         departure={trip.departure}
         loading={status === "loading"}
-
+        highlight={highlight}
+        highlightLabels={highlight ? cheapestStops : undefined}
+        onFlight={setFlying}
         satellite
       />
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 z-[1] backdrop-blur-md"
+        data-flying={flying}
+        className={cn(
+          "pointer-events-none fixed inset-0 z-[1] backdrop-blur-md transition-opacity duration-300 motion-reduce:transition-none",
+          flying && "opacity-0"
+        )}
         style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
       />
       <CloudOverlay
               className="fixed inset-0 z-[1] h-screen"
-              denseTop={status !== "loading"}
+              denseTop={!hidden}
+              density={flying ? FLIGHT_CLOUD_DENSITY : 1}
             />
       <div
         aria-hidden
@@ -129,10 +190,10 @@ export default function Home() {
           and made inert so it cannot be focused or read by assistive technology. */}
       <div
         data-testid="page-content"
-        inert={status === "loading"}
+        inert={hidden}
         className={cn(
           "relative z-10 mx-auto w-full max-w-5xl px-4 transition-opacity duration-500 motion-reduce:transition-none sm:px-6",
-          status === "loading" && "pointer-events-none opacity-0"
+          hidden && "pointer-events-none opacity-0"
         )}
       >
         <SiteHeader />
@@ -151,13 +212,14 @@ export default function Home() {
           loading={status === "loading"}
           onSubmit={(v) => {
             setSearchedTravelers(v.travelers)
+            setSearchNumber((n) => n + 1)
             setStatus("loading")
           }}
         />
 
-        {status === "done" && (
+        {status === "done" && !showcasing && (
           <TripOpportunities
-            options={SAMPLE_OPTIONS}
+            options={options}
             travelers={searchedTravelers}
           />
         )}

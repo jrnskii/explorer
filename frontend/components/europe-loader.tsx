@@ -7,10 +7,14 @@ import { resolvePlaces, isInMapRegion, type Departure } from "@/lib/europe-place
 import {
   ROUTE_FADE_MS,
   HOLD_MS,
+  HIGHLIGHT_FADE_MS,
+  HIGHLIGHT_LEG_MS,
+  HIGHLIGHT_ZOOM_MS,
   TRAIL,
   arcPath,
   planCascade,
   planRound,
+  highlightTimeline,
   roundDurationMs,
   type LonLat,
   type PlannedRoute,
@@ -58,6 +62,15 @@ const CSS = `
 @keyframes eu-arrive { 0% { opacity: 0; transform: scale(.7) } 20% { opacity: .95 } 100% { opacity: 0; transform: scale(3) } }
 @keyframes eu-ripple { 0% { opacity: .9; transform: scale(.4) } 100% { opacity: 0; transform: scale(4) } }
 @keyframes eu-blink { 50% { opacity: .35 } }
+@keyframes eu-best-out { from { opacity: 1 } to { opacity: 0 } }
+.eu-best-out { animation: eu-best-out var(--out-ms) ease-in-out var(--out-delay) forwards }
+@keyframes eu-label-in { from { opacity: 0 } to { opacity: 1 } }
+.eu-best-stop { opacity: 0; animation: eu-label-in 500ms ease-out var(--delay) forwards }
+.eu-best-dot { fill: var(--eu-route) }
+.eu-best-label { fill: var(--eu-route); stroke: rgb(0 0 0 / .6); stroke-width: 3px; paint-order: stroke; stroke-linejoin: round; font-size: 13px; font-weight: 600; text-anchor: middle }
+@keyframes eu-best-pulse { 0%, 100% { opacity: .65 } 50% { opacity: 1 } }
+.eu-best { stroke: var(--eu-route); stroke-dasharray: 1; stroke-dashoffset: 1; animation: eu-draw var(--draw) ease-out var(--delay) forwards }
+.eu-best-glow { animation: eu-draw var(--draw) ease-out var(--delay) forwards, eu-best-pulse 2s ease-in-out calc(var(--delay) + var(--draw)) infinite }
 .eu-line { stroke: var(--eu-route) }
 .eu-ruby { stroke: var(--eu-ruby) }
 .eu-silver { stroke: var(--eu-silver) }
@@ -69,13 +82,43 @@ const CSS = `
 .eu-ripple { transform-box: fill-box; transform-origin: center; opacity: 0; animation: eu-ripple 1.1s ease-out infinite }
 .eu-label { animation: eu-blink .8s ease-in-out infinite }
 @media (prefers-reduced-motion: reduce) {
-  .eu-draw, .eu-glow { animation: none; stroke-dashoffset: 0 }
+  .eu-draw, .eu-glow, .eu-best { animation: none; stroke-dashoffset: 0 }
+  .eu-best-glow { animation: none }
+  .eu-best-stop { animation: none; opacity: 1 }
   .eu-beam, .eu-arrive { display: none }
   .eu-life, .eu-ripple, .eu-label { animation: none }
   .eu-fade-out { animation: none; opacity: 0 }
   .eu-ripple { opacity: .5; transform: scale(2) }
 }
 `
+
+// Glowing white path of the cheapest trip: wide faint strokes under a bright core.
+const BEST_GLOW_LAYERS = [
+  { width: 14, opacity: 0.12 },
+  { width: 9, opacity: 0.2 },
+  { width: 5, opacity: 0.38 },
+] as const
+const BEST_LEG_MS = HIGHLIGHT_LEG_MS
+// Share of the screen kept empty around the path, so the zoom stays loose.
+const PATH_INSET = 0.22
+
+/**
+ * One labelled stop per distinct place: a round trip ends where it began, and
+ * a stop must not be written twice. `index` is the first visit, which times the
+ * label to the moment the path arrives.
+ */
+function uniqueStops(points: readonly LonLat[], names: readonly string[]) {
+  const seen = new Set<string>()
+  const stops: { at: LonLat; name: string; index: number }[] = []
+  points.forEach((at, index) => {
+    const key = `${at[0]},${at[1]}`
+    const name = names[index]
+    if (seen.has(key) || !name) return
+    seen.add(key)
+    stops.push({ at, name, index })
+  })
+  return stops
+}
 
 type Round = { id: number; routes: PlannedRoute[] }
 
@@ -100,6 +143,15 @@ export function EuropeLoader({
    * represent availability.
    */
   destinations?: readonly { lon: number; lat: number }[]
+  /**
+   * Ordered stops of the cheapest trip, as [lon, lat]. Drawn as a glowing white
+   * path once the search has finished.
+   */
+  highlight?: readonly LonLat[]
+  /** City names for `highlight`, same order; written next to each stop. */
+  highlightLabels?: readonly string[]
+  /** Called with true while the map zooms between regions, false once it settles. */
+  onFlight?: (flying: boolean) => void
   label?: string
   className?: string
 }) {
@@ -127,6 +179,9 @@ function EuropeLoaderRoutes({
   loading,
   satellite,
   destinations,
+  highlight,
+  highlightLabels,
+  onFlight,
   label = "Searching routes",
   className,
 }: {
@@ -134,6 +189,9 @@ function EuropeLoaderRoutes({
   loading: boolean
   satellite: boolean
   destinations?: readonly { lon: number; lat: number }[]
+  highlight?: readonly LonLat[]
+  highlightLabels?: readonly string[]
+  onFlight?: (flying: boolean) => void
   label?: string
   className?: string
 }) {
@@ -153,6 +211,20 @@ function EuropeLoaderRoutes({
         .map((d): LonLat => [d.lon, d.lat]),
     [destinations]
   )
+
+  // Once the cheapest path shows, the map zooms onto its region. A path that
+  // collapses to one point has no region to zoom to.
+  const showPath =
+    !loading &&
+    highlight !== undefined &&
+    highlight.some((p) => p[0] !== highlight[0][0] || p[1] !== highlight[0][1])
+  const fit = showPath ? highlight : points
+
+  // Once drawn, the whole path (lines, dots, names) fades away slowly.
+  const fadeVars = {
+    "--out-delay": `${highlightTimeline(highlight ?? []).fadeStartMs}ms`,
+    "--out-ms": `${HIGHLIGHT_FADE_MS}ms`,
+  } as CSSProperties
 
   // A single round is on screen at a time, so repeated searches never overlap.
   const [round, setRound] = useState<Round | null>(null)
@@ -199,7 +271,7 @@ function EuropeLoaderRoutes({
       )}
     >
       <style>{CSS}</style>
-      <EuropeOsmMap fit={points} satellite={satellite} className="absolute inset-0 z-0 bg-white! dark:bg-background!">
+      <EuropeOsmMap fit={fit} fitInset={showPath ? PATH_INSET : undefined} satellite={satellite} onFlight={onFlight} className="absolute inset-0 z-0 bg-white! dark:bg-background!">
         {({ project, width, height }) => {
           const drawn = round?.routes.map((r) => {
             const to = project(r.to)
@@ -271,6 +343,77 @@ function EuropeLoaderRoutes({
                             style={{ "--len": l.len } as CSSProperties}
                           />
                         ))}
+                      </g>
+                    )
+                  })}
+                </g>
+              )}
+
+              {showPath && highlight && (
+                <g
+                  key={highlight.map((p) => p.join(",")).join(">")}
+                  data-testid="cheapest-path"
+                  className="eu-best-out"
+                  style={fadeVars}
+                  fill="none"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                >
+                  {highlight.slice(1).flatMap((to, i) => {
+                    const from = highlight[i]
+                    if (from[0] === to[0] && from[1] === to[1]) return []
+                    const d = arcPath(project(from), project(to))
+                    const vars = {
+                      "--delay": `${HIGHLIGHT_ZOOM_MS + i * BEST_LEG_MS}ms`,
+                      "--draw": `${BEST_LEG_MS}ms`,
+                    } as CSSProperties
+                    return [
+                      <g key={i} style={vars}>
+                        {BEST_GLOW_LAYERS.map((l) => (
+                          <path
+                            key={l.width}
+                            d={d}
+                            pathLength={1}
+                            className="eu-best eu-best-glow"
+                            strokeWidth={l.width}
+                            strokeOpacity={l.opacity}
+                          />
+                        ))}
+                        <path
+                          d={d}
+                          pathLength={1}
+                          className="eu-best"
+                          strokeWidth={2.5}
+                        />
+                      </g>,
+                    ]
+                  })}
+                </g>
+              )}
+
+              {showPath && highlight && highlightLabels && (
+                <g
+                  key={`stops-${highlight.map((p) => p.join(",")).join(">")}`}
+                  data-testid="cheapest-labels"
+                  className="eu-best-out"
+                  style={fadeVars}
+                >
+                  {uniqueStops(highlight, highlightLabels).map(({ at, name, index }) => {
+                    const [x, y] = project(at)
+                    return (
+                      <g
+                        key={`${at[0]},${at[1]}`}
+                        className="eu-best-stop"
+                        style={
+                          {
+                            "--delay": `${HIGHLIGHT_ZOOM_MS + index * BEST_LEG_MS}ms`,
+                          } as CSSProperties
+                        }
+                      >
+                        <circle cx={x} cy={y} r={4} className="eu-best-dot" />
+                        <text x={x} y={y - 12} className="eu-best-label">
+                          {name}
+                        </text>
                       </g>
                     )
                   })}
