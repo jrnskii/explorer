@@ -644,6 +644,9 @@ just serve-base-graph
 
 Then open <http://127.0.0.1:8866>. Voilà executes the notebook on the server
 and serves the Cosmograph widget without involving the frontend application.
+The graph fills the browser viewport, resizes with the window, and keeps its
+controls over the canvas. Use your browser’s full-screen command to also hide
+browser chrome. To choose a different port, run `just serve-base-graph 8877`.
 
 ## Cheapest scheduled round trips (offline core)
 
