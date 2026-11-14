@@ -294,3 +294,11 @@ test.each([undefined, null])("older estimates render and expand without transpor
   await user.click(screen.getByRole("button", { name: "Travel details" }));
   expect(within(screen.getByRole("list", { name: "Route details" })).getAllByText("Transport unverified")).toHaveLength(3);
 });
+
+test("omits total elapsed trip hours from the opportunity summary", () => {
+  render(<TripOpportunities options={SAMPLE_OPTIONS.slice(0, 1)} />);
+  expect(screen.queryByText("88h 15m")).not.toBeInTheDocument();
+  expect(screen.getByRole("list", { name: "Cities visited" })).toBeInTheDocument();
+  expect(screen.getByText("07:00")).toBeInTheDocument();
+  expect(screen.getByText("23:15")).toBeInTheDocument();
+});

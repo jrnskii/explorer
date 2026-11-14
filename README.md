@@ -1,90 +1,72 @@
-# Round Trip
+# Explorer — In this economy, we've made travelling cheap again
 
-## Run staging
+Explorer is a multi-weight graph optimization engine developed specifically for finding optimal closed-path routes under given constraints on logistics data.
 
-Search ranks routes using the existing datasets and forecast models, then prices
-**only the single best opportunity** through Scrappa/Omio. The browser calls a
-Next.js server route, which authenticates to the GraphQL API using the server-only
-`APP_ACCESS_TOKEN`. The API follows `shared/graphql/schema_v1.graphql`.
+## Tools used
 
-Prepare the dated schedule snapshot and configure `.env.staging` using
-[the staging guide](docs/staging.md), then run:
+- `mise-en-place` — dev environment manager
+- `codegraph` — context compaction and code search (for free and locally!!!)
+- `codex-cli` — AI-assisted code generation and refactoring
 
-```sh
-just staging
+- `zed` — code editor with AI assistance
+- `vscode` — code editor with AI assistance (used for ipynb)
+
+## Under the hood
+
+Libs, frameworks, and runtimes used at the foundation of Explorer project.
+
+**Shared:**
+
+- `just` — task runner for common commands
+- `docker` — containerization and orchestration (TBD)
+- `graphql` — API query language and schema
+- `npx:skills` — LLM skill management
+
+**Backend:**
+
+- `networkx` — graph analysis and routing
+- `duckdb` — analytical database for storage and querying
+- `fastapi` — backend API server
+- `pytest` — Python testing framework
+
+**Frontend:**
+
+- `bun` — JavaScript runtime and package manager
+- `nextjs` — frontend framework
+- `shadcn` — frontend component library
+- `tailwindcss` — frontend styling framework
+- `playwright` — end-to-end testing framework
+- `npx:skills` — LLM skill management
+
+And that's all basically.
+
+## Tasks
+
+Don't forget to run `mise install` and `just setup` after cloning the repository. It will install all dependencies and set up the environment.
+
+```make
+Available recipes:
+    api port="8000"              # Authenticated GraphQL API; loads APP_ACCESS_TOKEN from the repository .env.
+    build-base-graph *args       # Rebuild the complete static EU city graph, including city and transport weights.
+    codegen                      # Generate Python models and TypeScript types from the v1 GraphQL schema.
+    codegen-ignav                # Generate Pydantic v2 models from the Ignav OpenAPI schema.
+    codegen-python               # Generate Pydantic v2 models for the backend.
+    codegen-typescript           # Generate schema types for the frontend.
+    combine-schedules *args      # Extract relevant rail/bus/ferry GTFS scheduling data into local DuckDB.
+    default
+    demo-round-trip *args        # Run the Vilnius round-trip demo with detailed action logs; accepts --seed.
+    download-all-datasets        # Download all three external fixture datasets.
+    download-datasets *args      # Download external fixture datasets; accepts --dataset and --output-dir options.
+    download-schedules *args     # Download latest GTFS schedules for all European Mobility Database feeds.
+    extract-pricing *args        # Extract local Schengen fares and GTFS fare rules into a separate DuckDB file.
+    install                      # Install frontend dependencies
+    optimize-schedules *args     # Atomically index an existing serving snapshot without repricing or changing its age.
+    prepare-schedules *args      # Compile actual GTFS calendars and forecast prices into the serving snapshot.
+    preview port="3000"          # Open http://localhost:3000/preview
+    serve-base-graph port="8866" # Serve the base graph notebook as a standalone Voilà website.
+    setup                        # Install code-generation dependencies from the lockfiles (run mise install first).
+    staging                      # Build and start production servers for staging; requires a prepared schedule snapshot.
+    test-omio *args              # Manual live Omio probe: just test-omio --date YYYY-MM-DD (uses API credits).
+    train-pricing *args          # Fit independent flight/train/bus/ferry price models from extracted local data.
+    update-flight-data           # The upstream generated JSON is large; this task downloads it without displaying it.
 ```
-
-The staging stack uses production builds, non-root users, readiness checks and a
-persistent provider cache. It exposes the frontend on localhost; configure
-`FRONTEND_PORT` (the local setup uses 3100). No mock schedules or demo city list
-are used by the search API.
-
-## Local development with Compose
-
-After preparing `backend/data/staging/schedules.sqlite`, set `APP_ACCESS_TOKEN`
-and `SCRAPPA_API_KEY` in the root `.env`, then run:
-
-```sh
-docker compose up
-```
-
-Open <http://localhost:3000>. Both frontend and authenticated backend start;
-the frontend uses hot reload and locked Bun dependencies. `STAGING_DATA_DIRECTORY`
-can point to another snapshot directory. Backend source and shared SDL are mounted;
-container dependencies and frontend output remain in named volumes. The cache is
-persisted under `backend/data/`. To invoke an existing CLI instead of the HTTP API:
-
-```sh
-docker compose run --rm backend python -m backend.presentation.cli.round_trip --help
-```
-
-Initial setup pulls images and installs locked dependencies. Stop services with
-`docker compose down`. Use `compose.staging.yml` / `just staging` for staging servers.
-
-## Local development without Compose
-
-Set `APP_ACCESS_TOKEN`, `SCRAPPA_API_KEY`, and `SCHEDULE_SNAPSHOT_PATH` in the root
-`.env` (see `.env.example`). Point the snapshot path at a prepared
-`backend/data/staging/schedules.sqlite`. Start the two servers in separate terminals:
-
-```sh
-just api
-bun run --cwd frontend dev
-```
-
-The frontend development server shares the root access token and defaults to the
-API at `http://127.0.0.1:8000/graphql`. You can override `BACKEND_GRAPHQL_URL` in
-root `.env`, `frontend/.env.local`, or the process environment. Restart the frontend
-after changing root `.env`. Production configuration remains explicit.
-
-## GraphQL code generation
-
-The API source of truth is `shared/graphql/schema_v1.graphql`.
-
-Install [mise](https://mise.jdx.dev/), then run from the repository root:
-
-```sh
-mise install
-mise exec -- just setup
-mise exec -- just codegen
-```
-
-If mise is activated in your shell, you can use `just` directly.
-
-| Command                   | Purpose                                                       |
-| ------------------------- | ------------------------------------------------------------- |
-| `just setup`              | Install Python and frontend dependencies from their lockfiles |
-| `just codegen`            | Generate both Python models and TypeScript types              |
-| `just codegen-python`     | Generate only Python models                                   |
-| `just codegen-typescript` | Generate only TypeScript types                                |
-
-Generated files:
-
-- `backend/src/backend/infrastructure/graphql/models.py`: Pydantic v2 models generated by `datamodel-code-generator`. `DateTime` maps to `datetime.datetime` and `Decimal` to `decimal.Decimal`, configured in `shared/graphql/python-scalars.json`. Serialize models with `model_dump(mode="json", by_alias=True)` to preserve GraphQL field names such as `from`.
-- `frontend/generated/schema_v1.ts`: schema types generated by GraphQL Code Generator, configured in `frontend/codegen.ts`. Both custom scalars map to strings, matching their JSON representation without losing decimal precision.
-
-Regenerate these files after changing the schema; do not edit them manually.
-Generation is deterministic and omits timestamps. These are data models/types,
-not a GraphQL server, resolvers, or an executable client. Constraints described
-only in schema documentation (such as budgets and city exclusions) must still be
-implemented in application code.

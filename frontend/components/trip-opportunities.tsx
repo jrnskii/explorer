@@ -104,8 +104,7 @@ function summarize(option: RoundTripOption) {
   const travelSeconds = path.reduce((sum, l) => sum + l.time_in_travel, 0);
   const departAt = path[0].departure_at;
   const returnAt = path[path.length - 1].arrival_at;
-  const totalSeconds = (Date.parse(returnAt) - Date.parse(departAt)) / 1000;
-  return { home, travelSeconds, totalSeconds, departAt, returnAt };
+  return { home, travelSeconds, departAt, returnAt };
 }
 
 // A plain vertical list: one full-width card per row, spaced with block margins.
@@ -309,7 +308,7 @@ export function TripOpportunity({
   priceScope?: "adult" | "party";
   className?: string;
 }) {
-  const { home, travelSeconds, totalSeconds, departAt, returnAt } =
+  const { home, travelSeconds, departAt, returnAt } =
     summarize(option);
   const { trips, toggle } = useSavedTrips();
   const saved = trips.some((t) => t.id === tripId(option));
@@ -349,9 +348,6 @@ export function TripOpportunity({
               <Endpoint city={home} iso={departAt} align="start" />
 
               <div className="min-w-0 flex-1 pt-0.5">
-                <div className="text-center text-xs text-muted-foreground">
-                  {formatDuration(totalSeconds)}
-                </div>
                 <RouteTimeline
                   legs={option.path.map((leg) => ({
                     from: leg.from_city.name,
