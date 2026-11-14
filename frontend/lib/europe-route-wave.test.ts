@@ -4,6 +4,10 @@ import { describe, test } from "vitest"
 import { EU_CAPITALS } from "./eu-capitals"
 import {
   CASCADE_BRANCHING,
+  HIGHLIGHT_FADE_MS,
+  HIGHLIGHT_LEG_MS,
+  HIGHLIGHT_ZOOM_MS,
+  highlightTimeline,
   HOLD_MS,
   ROUTE_COUNT,
   ROUTE_FADE_MS,
@@ -129,5 +133,20 @@ describe("planCascade", () => {
   test("keys are unique and an empty branching plan yields no routes", () => {
     assert.equal(new Set(routes.map((r) => r.key)).size, routes.length)
     assert.deepEqual(planCascade(points, madrid, 0, []), [])
+  })
+})
+
+describe("highlightTimeline", () => {
+  test("zooms, draws each hop, then fades for 3 seconds", () => {
+    const stops = [[0, 0], [1, 1], [2, 2], [0, 0]] as const
+    const { fadeStartMs, endMs } = highlightTimeline(stops)
+    assert.equal(fadeStartMs, HIGHLIGHT_ZOOM_MS + 3 * HIGHLIGHT_LEG_MS)
+    assert.equal(HIGHLIGHT_FADE_MS, 3000)
+    assert.equal(endMs - fadeStartMs, 3000)
+  })
+
+  test("has no hops for fewer than two stops", () => {
+    assert.equal(highlightTimeline([]).fadeStartMs, HIGHLIGHT_ZOOM_MS)
+    assert.equal(highlightTimeline([[0, 0]]).fadeStartMs, HIGHLIGHT_ZOOM_MS)
   })
 })

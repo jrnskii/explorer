@@ -593,15 +593,25 @@ export function TripInputs({
           >
             <ComboboxInput
               id={`${id}-budget`}
-              aria-label="Max budget"
+              aria-label="Max. budget"
               inputMode="numeric"
               autoComplete="off"
-              placeholder="Max budget"
-              className="h-8 w-36 rounded-full bg-card dark:bg-card [&_input]:text-sm [&_input]:font-medium"
+              placeholder="Max. budget"
+              className={cn(
+                              "h-8 w-36 rounded-full [&_input]:text-sm [&_input]:font-medium",
+                              value.budget
+                                ? "border-primary bg-primary text-primary-foreground dark:bg-primary [&_input]:text-primary-foreground"
+                                : "bg-card dark:bg-card"
+                            )}
                             showTrigger={false}
             >
               <InputGroupAddon>
-                <InputGroupText className="font-medium text-foreground">
+                <InputGroupText
+                  className={cn(
+                    "font-medium",
+                    value.budget ? "text-primary-foreground" : "text-foreground"
+                  )}
+                >
                   €
                 </InputGroupText>
               </InputGroupAddon>

@@ -7,10 +7,13 @@ import {
   geoJSON,
   latLngBounds,
   map as createMap,
+  point,
   tileLayer,
   type Map as LeafletMapInstance,
 } from "leaflet"
-import { useCallback, useEffect, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+
+import { HIGHLIGHT_ZOOM_MS } from "@/lib/europe-route-wave"
 import { geoBounds } from "d3-geo"
 import { feature } from "topojson-client"
 import type { GeometryCollection, Topology } from "topojson-specification"
@@ -27,6 +30,12 @@ export type OverlayApi = {
 }
 
 const PADDING = 48
+// Zooming in further than this on a short trip only shows blurry tiles.
+const MAX_FIT_ZOOM = 7
+
+const toBounds = (fit: readonly LonLat[]) =>
+  latLngBounds(fit.map(([lon, lat]) => [lat, lon]))
+
 
 // Esri World Imagery satellite tiles (no API key). The on-map attribution
 // control is hidden by request; see `attributionControl` below.
@@ -68,12 +77,31 @@ const STATIC_MAP_OPTIONS = {
 function Overlay({
   map,
   fit,
+  inset = 0,
+  onFlight,
   children,
 }: {
   map: LeafletMapInstance
   fit: readonly LonLat[]
+  inset?: number
+  onFlight?: (flying: boolean) => void
   children: (api: OverlayApi) => ReactNode
 }) {
+  const onFlightRef = useRef(onFlight)
+  const insetRef = useRef(inset)
+  useEffect(() => {
+    onFlightRef.current = onFlight
+    insetRef.current = inset
+  }, [onFlight, inset])
+  // Space kept clear around the fitted points: at least PADDING pixels, or
+  // `inset` of the map size on each side.
+  const paddingFor = useCallback(() => {
+    const { x, y } = map.getSize()
+    return point(
+      Math.max(PADDING, x * insetRef.current),
+      Math.max(PADDING, y * insetRef.current)
+    )
+  }, [map])
   // Bumped whenever the map view changes so projected positions are recomputed.
   const [, setVersion] = useState(0)
   const bump = useCallback(() => setVersion((v) => v + 1), [])
@@ -85,20 +113,63 @@ function Overlay({
     }
   }, [map, bump])
 
+  // Latest `fit`, and whether a zoom animation is in flight (resizes must not
+  // fight it).
+  const fitRef = useRef(fit)
+  const animating = useRef(false)
+
   // Keep every point in view as the container is resized.
   useEffect(() => {
-    const bounds = latLngBounds(fit.map(([lon, lat]) => [lat, lon]))
     const refit = () => {
-      if (!map.getPane("mapPane")) return
+      if (!map.getPane("mapPane") || animating.current) return
       map.invalidateSize({ animate: false })
-      map.fitBounds(bounds, { padding: [PADDING, PADDING], animate: false })
+      map.fitBounds(toBounds(fitRef.current), {
+        padding: paddingFor(),
+        animate: false,
+      })
       bump()
     }
     refit()
     const observer = new ResizeObserver(refit)
     observer.observe(map.getContainer())
     return () => observer.disconnect()
-  }, [map, fit, bump])
+  }, [map, bump, paddingFor])
+
+  // A new `fit` flies smoothly to the new region. Leaflet's flyTo steps the
+  // view every frame and keeps the already-loaded tiles on screen, scaled,
+  // while the new ones load; setting the view by hand per frame would drop the
+  // imagery and flash white. The overlay is re-projected on every frame.
+  useEffect(() => {
+    if (fitRef.current === fit) return
+    fitRef.current = fit
+    if (!map.getPane("mapPane")) return
+
+    const options = {
+      padding: paddingFor(),
+      maxZoom: MAX_FIT_ZOOM,
+    }
+    const bounds = toBounds(fit)
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    if (reduced) {
+      // The view change fires moveend/zoomend, which re-projects the overlay.
+      map.fitBounds(bounds, { ...options, animate: false })
+      return
+    }
+
+    const done = () => {
+      animating.current = false
+      map.off({ move: bump, zoom: bump, moveend: done })
+      onFlightRef.current?.(false)
+    }
+    animating.current = true
+    onFlightRef.current?.(true)
+    map.on({ move: bump, zoom: bump, moveend: done })
+    map.flyToBounds(bounds, { ...options, duration: HIGHLIGHT_ZOOM_MS / 1000 })
+    return () => {
+      done()
+      if (map.getPane("mapPane")) map.stop()
+    }
+  }, [map, fit, bump, paddingFor])
 
   // A removed map (effect cleanup, Fast Refresh) has no panes; projecting
   // against it throws `el._leaflet_pos`. Wait for the fresh instance instead.
@@ -144,6 +215,10 @@ export default function EuropeOsmMap(props: MapProps) {
 }
 
 type MapProps = {
+  /** Fraction of the map size kept empty on each side of `fit` (default: a small fixed margin). */
+  fitInset?: number
+  /** Called with true when a zoom animation starts and false when it ends. */
+  onFlight?: (flying: boolean) => void
   /** Show satellite imagery instead of plain country outlines. */
   satellite?: boolean
   fit: readonly LonLat[]
@@ -155,7 +230,7 @@ type MapProps = {
 // react-leaflet's `MapContainer`: under React Strict Mode its effect cleanup
 // removes the map but never recreates it, so layers added afterwards throw
 // (`this.getPane().appendChild`). Here every effect run owns a fresh map.
-function LeafletMap({ fit, satellite = true, className, children }: MapProps) {
+function LeafletMap({ fit, fitInset, satellite = true, className, onFlight, children }: MapProps) {
   const [node, setNode] = useState<HTMLDivElement | null>(null)
   const [map, setMap] = useState<LeafletMapInstance | null>(null)
 
@@ -179,6 +254,7 @@ function LeafletMap({ fit, satellite = true, className, children }: MapProps) {
     tileLayer(SATELLITE_TILES_URL, {
       attribution: SATELLITE_ATTRIBUTION,
       maxZoom: 19,
+
     }).addTo(instance)
     const tilePane = instance.getPane("tilePane")
     if (tilePane) {
@@ -211,7 +287,7 @@ function LeafletMap({ fit, satellite = true, className, children }: MapProps) {
   return (
     <div ref={setNode} className={className}>
       {map && (
-        <Overlay map={map} fit={fit}>
+        <Overlay map={map} fit={fit} inset={fitInset} onFlight={onFlight}>
           {children}
         </Overlay>
       )}
