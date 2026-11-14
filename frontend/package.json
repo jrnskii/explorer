@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "codegen": "graphql-codegen --config codegen.ts"
+    "codegen": "graphql-codegen --config codegen.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
+    "@cosmograph/react": "^2.5.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
     "date-fns": "^4.4.0",
@@ -26,12 +28,15 @@
     "@graphql-codegen/cli": "^8.0.0",
     "@graphql-codegen/typescript": "^7.0.1",
     "@tailwindcss/turbopack": "4.3.3",
+    "@testing-library/react": "^16.3.3",
+    "@types/bun": "^1.4.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "graphql": "^17.1.0",
+    "happy-dom": "^21.0.4",
     "tailwindcss": "4.3.3",
     "typescript": "^5"
   },

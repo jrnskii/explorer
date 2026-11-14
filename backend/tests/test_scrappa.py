@@ -116,6 +116,13 @@ class ScrappaTests(unittest.TestCase):
                 self.assertEqual(urlparse(url).path, path)
                 self.assertEqual(key, "secret-test-key")
                 self.assertEqual(timeout, 60)
+                if endpoint in {"search", "summary"}:
+                    query = parse_qs(urlparse(url).query)
+                    self.assertEqual(
+                        query["travel_mode[]"],
+                        sorted(params.get("travel_mode", "train,bus,flight").split(",")),
+                    )
+                    self.assertNotIn("travel_mode", query)
                 if endpoint == "trip":
                     self.assertEqual(parse_qs(urlparse(url).query)["trip_id"], ["x&y"])
                 if endpoint == "summary":

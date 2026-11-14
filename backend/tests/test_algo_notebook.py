@@ -34,7 +34,7 @@ def fixture_graph():
 
 
 def execute_notebook():
-    scope = {}
+    scope = {"NOTEBOOK_PRICING": "mock"}
     with patch("IPython.display.display"):
         for index, cell in enumerate(json.loads(NOTEBOOK.read_text())["cells"]):
             if cell["cell_type"] == "code":

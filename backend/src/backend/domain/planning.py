@@ -185,6 +185,9 @@ class RoundTrip:
     total_price: Money
     city_stays: tuple[CityStay, ...] = ()
     stay_fit: float | None = None
+    price_status: str = "supplied"
+    approximate_price: Money | None = None
+    ranking_adjustment: Money | None = None
 
     @property
     def path(self) -> tuple[TripLeg, ...]:

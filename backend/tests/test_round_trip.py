@@ -355,6 +355,8 @@ class BoundaryAndProviderTests(unittest.TestCase):
                 "backend.presentation.cli.round_trip",
                 "--request",
                 str(path),
+                "--pricing",
+                "mock",
             ]
             actual = subprocess.run(command, capture_output=True, text=True, timeout=30)
             self.assertEqual(actual.returncode, 0, actual.stderr)

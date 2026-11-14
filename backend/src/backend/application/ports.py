@@ -2,8 +2,9 @@
 
 from typing import Protocol
 
+from backend.domain.pricing import ForecastQuery, PriceForecast, RoundTripQuote
 from backend.domain.fares import FareOffer, FlightSegment
-from backend.domain.planning import JourneyOffer, SearchSettings
+from backend.domain.planning import JourneyOffer, RoundTrip, SearchSettings
 
 
 class FareGraphWriter(Protocol):
@@ -28,3 +29,21 @@ class JourneyOfferProvider(Protocol):
     """
 
     def offers(self, settings: SearchSettings) -> tuple[JourneyOffer, ...]: ...
+
+
+class PriceForecaster(Protocol):
+    """Return a planning estimate or None for unsupported evidence coverage."""
+
+    def predict(self, query: "ForecastQuery") -> "PriceForecast | None": ...
+
+
+class OfferPriceForecaster(Protocol):
+    """Forecast an entire purchase unit locally; unsupported coverage returns None."""
+
+    def estimate_offer(self, offer: JourneyOffer) -> PriceForecast | None: ...
+
+
+class RoundTripExactPricer(Protocol):
+    """Resolve provider fares for exactly one chosen city/mode/date path."""
+
+    def quote(self, option: RoundTrip, settings: SearchSettings) -> RoundTripQuote: ...

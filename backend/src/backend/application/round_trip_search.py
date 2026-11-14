@@ -5,12 +5,18 @@ searches find the cheapest supplied offers only when exploration is not truncate
 """
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, localcontext
 from typing import Iterable
 import logging
 
-logger = logging.getLogger(__name__)
+from backend.application.ports import OfferPriceForecaster, RoundTripExactPricer
+from backend.domain.pricing import (
+    ExactPricingUnavailable,
+    CandidateEstimate,
+    PriceReconciliation,
+    RoundTripQuote,
+)
 
 from backend.domain.planning import (
     CityStay,
@@ -20,6 +26,8 @@ from backend.domain.planning import (
     SearchSettings,
     instant,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -42,6 +50,7 @@ class SearchResult:
     states_explored: int
     truncation_reasons: tuple[str, ...]
     results_limited: bool
+    pricing: PriceReconciliation | None = None
 
 
 def find_round_trips(
@@ -50,11 +59,18 @@ def find_round_trips(
     limits: SearchLimits = SearchLimits(),
     *,
     allow_city_revisits: bool = False,
+    price_forecaster: OfferPriceForecaster | None = None,
+    exact_pricer: RoundTripExactPricer | None = None,
 ) -> SearchResult:
     """Skip repeated cities per itinerary, except the final return home.
 
     Internal ticket connections count as visits. Set allow_city_revisits=True
     explicitly to explore schedules that pass through a city more than once.
+
+    Forecast whole purchases before traversal. With exact_pricer, retain candidates
+    by estimated price and verify only the cheapest retained route after traversal.
+    Provider failures never trigger another candidate check; ranking adjustments
+    remain separate from genuine fares and original forecasts.
     """
     if type(allow_city_revisits) is not bool:
         raise ValueError("allow_city_revisits must be a boolean")
@@ -65,6 +81,13 @@ def find_round_trips(
         settings.expenses_tolerance.amount,
         settings.expenses_tolerance.currency,
     )
+    staged = exact_pricer is not None
+    rank = (
+        (lambda option: (option.total_price.amount, *_rank(option)))
+        if staged
+        else _rank
+    )
+    unpriced = []
     adjacency = defaultdict(list)
     identities = {}
     excluded = set(settings.excluded_cities)
@@ -86,10 +109,6 @@ def find_round_trips(
             logger.debug("Skip duplicate offer=%s", offer.id)
             continue
         identities[offer.id] = offer
-        if offer.price.currency != settings.expenses_tolerance.currency:
-            raise ValueError(
-                "offer currency differs from budget; currency conversion is unsupported"
-            )
         if any(
             leg.transport_type not in settings.transport_types
             or {leg.origin, leg.destination} & excluded
@@ -107,6 +126,18 @@ def find_round_trips(
         ):
             logger.debug("Reject offer=%s: outside departure/return horizon", offer.id)
             continue
+        if price_forecaster is not None:
+            forecast = price_forecaster.estimate_offer(offer)
+            if forecast is None:
+                unpriced.append(offer.id)
+                continue
+            offer = replace(
+                offer, price=forecast.price, source="forecast:" + forecast.model_id
+            )
+        if offer.price.currency != settings.expenses_tolerance.currency:
+            raise ValueError(
+                "offer currency differs from budget; currency conversion is unsupported"
+            )
         adjacency[offer.path[0].origin].append(offer)
         logger.debug("Index offer=%s", offer.id)
     for outgoing in adjacency.values():
@@ -157,7 +188,13 @@ def find_round_trips(
                 and earliest <= ready <= latest
             ):
                 candidate = RoundTrip(
-                    chosen, Money(total, settings.expenses_tolerance.currency)
+                    chosen,
+                    Money(total, settings.expenses_tolerance.currency),
+                    price_status=(
+                        "estimated"
+                        if (price_forecaster is not None or staged)
+                        else "supplied"
+                    ),
                 )
                 stays, fit = city_stays(candidate, settings)
                 candidates.append(
@@ -166,6 +203,7 @@ def find_round_trips(
                         candidate.total_price,
                         stays,
                         fit if settings.fuzzy_search else None,
+                        price_status=candidate.price_status,
                     )
                 )
                 logger.info(
@@ -174,7 +212,7 @@ def find_round_trips(
                     tuple(offer.id for offer in chosen),
                 )
                 # Bound retained results without stopping exploration.
-                candidates.sort(key=_rank)
+                candidates.sort(key=rank)
                 if len(candidates) > limits.max_results:
                     dropped = candidates.pop()
                     logger.debug(
@@ -213,7 +251,7 @@ def find_round_trips(
                 )
                 continue
             amount = _add_exact(total, offer.price.amount)
-            if amount > settings.expenses_tolerance.amount:
+            if not staged and amount > settings.expenses_tolerance.amount:
                 logger.debug(
                     "Skip ticket=%s: price=%s exceeds budget", offer.id, amount
                 )
@@ -246,9 +284,185 @@ def find_round_trips(
         sorted(reasons),
         results_limited,
     )
-    return SearchResult(
+    result = SearchResult(
         tuple(candidates), states, tuple(sorted(reasons)), results_limited
     )
+    if exact_pricer is not None:
+        return _reconcile_one(result, settings, exact_pricer, tuple(unpriced))
+    if price_forecaster is not None:
+        return replace(
+            result,
+            pricing=PriceReconciliation(
+                "estimated", unpriced_offer_ids=tuple(unpriced)
+            ),
+        )
+    return result
+
+
+def _reconcile_one(result, settings, pricer, unpriced):
+    if not result.options:
+        return replace(
+            result,
+            pricing=PriceReconciliation("no_candidates", unpriced_offer_ids=unpriced),
+        )
+    chosen = min(result.options, key=lambda o: (o.total_price.amount, *_rank(o)))
+    checked = tuple(o.id for o in chosen.offers)
+    zero = Money(Decimal(0), settings.expenses_tolerance.currency)
+
+    def record(original, returned, status, adjustment=zero):
+        return CandidateEstimate(
+            tuple(o.id for o in original.offers),
+            original.total_price,
+            returned,
+            adjustment,
+            status,
+        )
+
+    try:
+        quote = pricer.quote(
+            chosen, settings
+        )  # Exactly one route-level invocation; no retry.
+        verified = _verified_option(chosen, quote, settings)
+    except ExactPricingUnavailable as error:
+        estimated = tuple(
+            o
+            for o in result.options
+            if o.total_price.amount <= settings.expenses_tolerance.amount
+        )
+        return replace(
+            result,
+            options=estimated,
+            pricing=PriceReconciliation(
+                "unavailable",
+                tuple(record(o, o.total_price, "estimated") for o in result.options),
+                checked,
+                unpriced_offer_ids=unpriced,
+                error=str(error),
+            ),
+        )
+    others = [o for o in result.options if o is not chosen]
+    # A single observed underestimation calibrates remaining totals. The raw
+    # forecast, ticket prices and source graph are preserved, never training labels.
+    uplift = zero
+    if others and verified.total_price.amount > min(
+        o.total_price.amount for o in others
+    ):
+        uplift = Money(
+            _add_exact(
+                verified.total_price.amount, chosen.total_price.amount.copy_negate()
+            ),
+            zero.currency,
+        )
+    adjusted = [
+        replace(
+            o,
+            total_price=Money(
+                _add_exact(o.total_price.amount, uplift.amount), zero.currency
+            ),
+            approximate_price=o.total_price,
+            ranking_adjustment=uplift,
+            price_status="adjusted_estimate" if uplift.amount else "estimated",
+        )
+        for o in others
+    ]
+    options = [verified, *adjusted]
+    options.sort(
+        key=lambda o: (
+            o.total_price.amount,
+            o.price_status != "provider_advertised",
+            *_rank(o),
+        )
+    )
+    rows = [record(chosen, verified.total_price, "provider_advertised")]
+    rows += [
+        record(original, updated.total_price, updated.price_status, uplift)
+        for original, updated in zip(others, adjusted, strict=True)
+    ]
+    status = (
+        "provider_priced"
+        if verified.total_price.amount <= settings.expenses_tolerance.amount
+        else "over_budget"
+    )
+    response_ids = tuple(
+        dict.fromkeys(r for purchase in quote.purchases for r in purchase.response_ids)
+    )
+    return replace(
+        result,
+        options=tuple(
+            o
+            for o in options
+            if o.total_price.amount <= settings.expenses_tolerance.amount
+        ),
+        pricing=PriceReconciliation(
+            status,
+            tuple(rows),
+            checked,
+            response_ids,
+            uplift,
+            unpriced,
+            fees_complete=quote.fees_complete,
+        ),
+    )
+
+
+def _verified_option(original, quote, settings):
+    if (
+        not isinstance(quote, RoundTripQuote)
+        or quote.price_scope != "provider_advertised"
+    ):
+        raise ExactPricingUnavailable(
+            "Provider did not return a supported whole-purchase quote"
+        )
+    purchases = {p.original_offer_id: p for p in quote.purchases}
+    if len(purchases) != len(quote.purchases) or set(purchases) != {
+        o.id for o in original.offers
+    }:
+        raise ExactPricingUnavailable(
+            "Provider quote does not cover the selected purchases exactly once"
+        )
+    offers = []
+    for previous in original.offers:
+        purchase = purchases[previous.id]
+        current = purchase.offer
+        if (
+            current.price.currency != settings.expenses_tolerance.currency
+            or current.synthetic
+            or [(l.origin, l.destination, l.transport_type) for l in current.path]
+            != [(l.origin, l.destination, l.transport_type) for l in previous.path]
+        ):
+            raise ExactPricingUnavailable(
+                "Provider changed the selected route, modes or price currency"
+            )
+        offers.append(replace(current, id=previous.id))
+    # Quote matching preserves city/mode sequence. Recheck actual times in order,
+    # not by exploring a second set of alternatives or invoking the provider again.
+    ready = instant(settings.departure_date)
+    for offer in offers:
+        if instant(offer.path[0].departure_at) < ready:
+            raise ExactPricingUnavailable("Provider timetable breaks a connection")
+        ready = instant(offer.path[-1].arrival_at)
+    earliest, latest = settings.return_window
+    if not earliest <= ready <= latest:
+        raise ExactPricingUnavailable("Provider timetable violates the return window")
+    total = Money(
+        sum_exact(o.price.amount for o in offers), settings.expenses_tolerance.currency
+    )
+    candidate = RoundTrip(tuple(offers), total)
+    stays, fit = city_stays(candidate, settings)
+    return replace(
+        candidate,
+        city_stays=stays,
+        stay_fit=fit if settings.fuzzy_search else None,
+        price_status="provider_advertised",
+        approximate_price=original.total_price,
+    )
+
+
+def sum_exact(values):
+    total = Decimal(0)
+    for value in values:
+        total = _add_exact(total, value)
+    return total
 
 
 def _rank(option: RoundTrip):

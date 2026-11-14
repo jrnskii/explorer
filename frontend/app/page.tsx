@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import type { City } from "@/components/city-picker"
 import { SiteHeader } from "@/components/site-header"
@@ -13,6 +13,8 @@ import {
   TripOpportunities,
   TripOpportunitiesPlaceholder,
 } from "@/components/trip-opportunities"
+import type { RoundTripOption } from "@/generated/schema_v1"
+import { priceSamples } from "@/lib/sample-forecast"
 import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 
 const CITIES: City[] = [
@@ -32,14 +34,32 @@ const CITIES: City[] = [
 export default function Home() {
   const [trip, setTrip] = useState<TripInputsValue>(EMPTY_TRIP_INPUTS)
   const [searchedTravelers, setSearchedTravelers] = useState(1)
-  const [status, setStatus] = useState<"idle" | "loading" | "done">("idle")
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
+  const [options, setOptions] = useState<RoundTripOption[]>([])
+  const [error, setError] = useState("")
+  const pending = useRef<AbortController | null>(null)
 
-  // Mock search: resolves with sample data after a short delay.
-  useEffect(() => {
-    if (status !== "loading") return
-    const timer = setTimeout(() => setStatus("done"), 800)
-    return () => clearTimeout(timer)
-  }, [status])
+  useEffect(() => () => pending.current?.abort(), [])
+
+  async function search(value: TripInputsValue) {
+    pending.current?.abort()
+    const controller = new AbortController()
+    pending.current = controller
+    setSearchedTravelers(value.travelers)
+    setStatus("loading")
+    setError("")
+    setOptions([])
+    try {
+      const estimates = await priceSamples(SAMPLE_OPTIONS, value, controller.signal)
+      if (controller.signal.aborted) return
+      setOptions(estimates)
+      setStatus("done")
+    } catch (failure) {
+      if (controller.signal.aborted) return
+      setError(failure instanceof Error ? failure.message : "Price estimates are unavailable.")
+      setStatus("error")
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
@@ -50,16 +70,19 @@ export default function Home() {
           onChange={setTrip}
           cities={CITIES}
           loading={status === "loading"}
-          onSubmit={(v) => {
-            setSearchedTravelers(v.travelers)
-            setStatus("loading")
-          }}
+          onSubmit={search}
         />
+        <p className="text-sm text-muted-foreground">
+          Sample itineraries with estimated fares. Schedules are illustrative, not bookable.
+          Routes without supported pricing are omitted.
+        </p>
+        {status === "error" && <p role="alert">{error}</p>}
         {status === "loading" && <TripOpportunitiesPlaceholder />}
         {status === "done" && (
           <TripOpportunities
-            options={SAMPLE_OPTIONS}
+            options={options}
             travelers={searchedTravelers}
+            priceScope="party"
           />
         )}
       </main>

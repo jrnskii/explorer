@@ -106,6 +106,8 @@ class MapOutputTests(unittest.TestCase):
                 "backend.presentation.cli.round_trip",
                 "--request",
                 str(request),
+                "--pricing",
+                "mock",
             ],
         )
         for command in commands:

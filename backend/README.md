@@ -646,15 +646,16 @@ and serves the Cosmograph widget without involving the frontend application.
 
 ## Cheapest scheduled round trips (offline core)
 
-Run the first offline slice with v1 GraphQL-shaped JSON settings:
+Train the local models with `just train-pricing`, then search demonstration
+schedules with forecast EUR prices using v1 GraphQL-shaped JSON settings:
 
 ```sh
 uv run --project backend --locked python -m backend.presentation.cli.round_trip \
-  --request backend/examples/round_trip.json --seed 42 --max-results 10
+  --request backend/examples/round_trip_forecast.json --seed 42 --max-results 10
 ```
 
 The CLI emits a JSON envelope with `options` shaped as `RoundTripOption`, exact
-string amounts, `from` aliases, synthetic provenance, explored-state count,
+string amounts, `from` aliases, forecast evidence and synthetic-schedule provenance, explored-state count,
 `truncation_reasons`, and `results_limited`. Invalid input/provider coverage exits
 with status 2 and diagnostics on stderr. This is a CLI, not an executable GraphQL
 server; output is validated against the shared schema and generated models.
@@ -687,11 +688,14 @@ The demo has fixture-local canonical IDs `pl-warsaw`, `pl-krakow`, `fr-paris`,
 five-city directed airport pairs are hypothetical fixture coverage. Train
 (Warsaw/Krakow), bus (Paris/Amsterdam), and ferry (London/Amsterdam) services are
 explicit synthetic corridors in both directions, departing at 08:00/16:00 UTC.
-`StaticTransportPrices.train/bus/ferry` supply deterministic USD amounts. These
-prices, schedules, ferry city access assumptions, and flights are **not live
-availability**. No terminal-access, check-in, or boarding-time guarantee is made.
+`StaticTransportPrices.train/bus/ferry` supply deterministic USD amounts only
+under explicit `--pricing mock`. Default forecast mode discards fixture prices,
+uses independent fitted EUR models, and records unsupported purchase units in
+`unpriced_offers`. Schedules, ferry city access assumptions and estimates are
+**not live availability**. No terminal-access, check-in, or boarding-time guarantee is made.
 
-The demo supports USD and horizons up to 31 days. It resolves the overlay once
+The timetable fixture supports horizons up to 31 days. Forecast mode uses EUR;
+explicit mock mode uses USD. The unchanged USD examples require `--pricing mock`. It resolves the overlay once
 before exploration; no network or paid requests occur. Core limits default to
 8 physical legs, 100,000 explored states, and 20 retained results. Result limits
 retain the best options encountered while continuing exploration; leg/state
@@ -732,8 +736,9 @@ the cheapest qualifying trip under that policy costs USD 98.00. The table notebo
 the **Allow city revisits** checkbox. All notebook search settings are widgets;
 run all cells once, then committed widget edits automatically refresh the search
 and itinerary tables. Dates use the browser timezone in the pickers and UTC in
-the tables. Changing dates queries in-process mock flight, train, bus and ferry
-APIs to generate synthetic schedules on existing base-graph connections only.
+the tables. Default **Forecast EUR** pricing uses the four shared models and
+omits unpriced connections before generating synthetic schedules. The **Explicit
+mock USD** option retains deterministic fixture prices for algorithm experiments.
 The snapshot path and home/constraint cities are widgets; graph city IDs, directed
 modes, operators and parallel connection keys are preserved. The entire snapshot
 is used as one graph, without city, regional or connected-component partitions.
@@ -741,8 +746,9 @@ City search filters only the home, required, excluded and preference selectors;
 all graph cities remain available as interchanges. Configure the seed and services per day,
 or click **Generate new sample**. Identical seeds and requests
 reproduce the same tickets. Generation is bounded to 14 days. The notebook contains
-its models, solver, restricted snapshot loader, mock APIs and reactive UI directly,
-with no backend-package imports. Graph snapshots are cached until the selected file
+its solver, restricted snapshot loader, timetable fixtures and reactive UI directly.
+Forecast mode imports the shared backend pricing service; explicit mock mode
+remains self-contained and works without backend imports. Graph snapshots are cached until the selected file
 changes. A missing connection or direction is never generated. Search limits may
 truncate exploration and are reported explicitly. Vilnius surface services in
 this demo are invented; this does not add Vilnius to the general provider catalog.
@@ -796,7 +802,8 @@ within this application/fixture catalog, not universal identifiers or OSM node I
 The fixed city-centre markers come from the local `Cities.csv` snapshot by
 [Work With Data](https://www.workwithdata.com/datasets/cities), licensed CC BY 4.0;
 see `src/backend/infrastructure/fixtures/data/cities/README.md`. The source's
-Cracow label is displayed as Krakow. Timetables and fares remain synthetic.
+Cracow label is displayed as Krakow. Timetables remain synthetic; default fares
+are estimates, with synthetic prices available only in explicit mock mode.
 
 For a Leaflet-style overlay, use `[city.latitude, city.longitude]`. For GeoJSON
 or MapLibre, use `[city.longitude, city.latitude]`. Interpolate from `from_city`
@@ -807,6 +814,70 @@ geometry/position data. No map tiles, geocoder, or network requests are required
 to resolve these endpoint markers. This change supplies data, not a map renderer.
 
 ## Scrappa Omio API and local fare history
+
+### Manual Vilnius route probe
+
+Run the manual integration probe yourself; it is not part of the automated suite:
+
+```sh
+just test-omio --date 2026-12-01
+# Smaller selection, or destinations outside the default catalogue:
+just test-omio --date 2026-12-01 --destination Warsaw PL --destination London GB
+```
+
+Choose a departure date from today through the next 364 days. The script at
+`src/backend/presentation/cli/test_omio.py` loads repository-root `.env`, reading
+`SCRAPPA_API_KEY` without overriding an existing environment value. Options include
+`--env-file PATH`, `--database PATH`, `--timeout SECONDS` (default 60), and
+`--refresh` to refetch successful cached responses too.
+
+“Major destinations” is an explicit representative catalogue: the 80 other cities
+in `EU_CITIES`, plus London, Manchester, Edinburgh, Oslo, Bergen, Zurich, Geneva,
+Reykjavik and Istanbul (89 destinations). City names are resolved to actual Omio
+city IDs with exact accent-insensitive name and country matching; ambiguous or
+missing matches fail rather than guessing. Only names/countries come from the
+fixture; no synthetic schedules, fares or airport codes are used. Repeated
+`--destination CITY COUNTRY` options replace the default selection.
+
+For each destination, the probe requests one-way train, bus and flight journeys
+for one adult in EUR, including connections, at 100 trips per page. It follows
+`pagination.has_more` up to the documented 50-page limit. It marks incomplete mode
+searches, repeated trips, malformed pagination, inconsistent final totals and page
+limit truncation as failures. Empty results are a successful empty observation.
+This collects all results exposed by Omio for the selected date and destinations;
+it does not establish all worldwide routes or availability on other dates.
+Individual pages are separate live searches, so availability can change mid-run;
+the consistency checks cannot guarantee a single atomic upstream snapshot.
+Returned route IDs, departure date, one-way scope, currency and passenger count
+must match the request before a destination can be reported complete.
+
+The probe shares its raw-response database with `--exact-best` route verification.
+Their mode/sort parameters differ, so a probe run alone does not populate every
+cache key required by `--exact-best --cache-only`. Only the exact verifier writes
+selected trip details to `fare_observations`; neither path automatically retrains
+the forecasting models. See [the integration notes](../docs/pricing/forecasting.md#one-route-provider-reconciliation).
+
+Every received response is committed separately to the existing append-only
+`backend/data/scrappa.duckdb` cache **before** inspecting its results, including
+HTTP errors and malformed JSON. Transport failures retain a safe diagnostic.
+Earlier pages survive a later failure or interruption. Rerun the same command/date
+to reuse successful pages regardless of the client's normal TTL and retry failed
+HTTP requests once; there are no automatic retries within a run. Responses with
+valid JSON but invalid pagination/place/mode data remain cached too: inspect them
+and use `--refresh` to fetch them again. Cached data is a historical observation,
+not a guarantee that a fare is still bookable. Do not run concurrent cache writers.
+An in-flight response interrupted before its commit, disk failure or filesystem
+corruption cannot be guaranteed recoverable.
+
+The probe continues after individual destination failures. Progress goes to stderr;
+stdout is a JSON summary with per-destination status, trip counts and response IDs
+referencing `responses.response_id` in DuckDB (full trips remain in `responses.body`).
+Exit codes: 0 for all complete/empty, 1 for failures, 2 for invalid arguments, 130
+for Ctrl-C/SIGTERM. If interrupted or origin resolution fails, there is no final
+JSON summary, but committed responses remain available. Each uncached page/place
+lookup can consume credits; successful responses are never refetched by default.
+
+### General client and fare history
 
 The adapter in `infrastructure/scrappa/client.py` implements all six documented
 Scrappa Omio GET endpoints: `places`, `search`, `summary` (`search/summary`),
@@ -901,7 +972,7 @@ fields to a normal search request, or run the example:
 
 ```sh
 uv run --project backend --locked python -m backend.presentation.cli.round_trip \
-  --request backend/examples/round_trip_fuzzy.json --seed 42
+  --request backend/examples/round_trip_fuzzy.json --pricing mock --seed 42
 ```
 
 ```json
@@ -946,3 +1017,265 @@ ranks supplied schedules rather than inventing departures or rejecting slightly
 different stays. Budget, modes, mandatory/excluded cities, chronology, maximum
 duration, and return window stay strict. Search state/leg/result limits retain
 their existing truncation reporting; a limited search need not find the best fit.
+
+## Free pricing data relevant to Schengen
+
+Download the researched free sources for flights, trains and coaches:
+
+```sh
+uv run --project backend --locked python -m backend.infrastructure.pricing.download --list
+uv run --project backend --locked python -m backend.infrastructure.pricing.download
+# Anonymous sources only (Renfe uses Kaggle credentials described above):
+uv run --project backend --locked python -m backend.infrastructure.pricing.download \
+  --source flights sncf flixbus greenpeace checkmybus
+# Retry selected sources, or explicitly fetch new upstream versions:
+uv run --project backend --locked python -m backend.infrastructure.pricing.download \
+  --source renfe --refresh
+```
+
+The default output is git-ignored `backend/src/backend/infrastructure/fixtures/data/pricing/`. Each source gets a
+folder, and `manifest.json` records provenance, retrieval time, byte sizes, SHA-256,
+price semantics, geographic limitations, license notes and per-source failures.
+The manifest describes the sources selected in the latest invocation. Downloads
+from previous invocations remain on disk. Importing the module performs no I/O.
+
+Sources are:
+
+- `flights`: Hugging Face Flight Fare History, pinned to the repository commit
+  resolved at run time. Includes route/month aggregates, route summaries, booking
+  window and European country summaries, README and repository metadata. These are
+  advertised one-way EUR fare aggregates, not individual airline offers. The HF
+  custom license conflicts with the GitHub CC-BY description; review terms before
+  reuse. Free access does not imply unrestricted redistribution.
+- `sncf`: official TGV INOUI/OUIGO origin–destination tariff minima/maxima and
+  metadata, exported as JSON under ODbL. These bounds are not average fares or
+  date-specific availability.
+- `renfe`: the historical Spanish high-speed rail ticket-pricing Kaggle archive.
+  Requires Kaggle access/authentication, but no paid service. The ZIP is retained
+  without extraction. Inspect its license and schema before training.
+- `flixbus`: Mendeley dataset `j89kvrsdkn`, version 1, including the original Stata
+  observations and regression script. Downloads verify the publisher's SHA-256.
+  Historical data published in 2019, CC-BY-4.0.
+- `greenpeace` and `checkmybus`: free 2025 PDF comparison/market reports for
+  calibration context. **Reports only:** their underlying raw datasets are not
+  exposed by this downloader. No training-data reuse rights are inferred.
+
+The geographic reference is the current 29 Schengen countries, including Bulgaria,
+Romania, Norway, Iceland, Switzerland and Liechtenstein; excluding Britain, Ireland
+and Cyprus. **Raw downloads retain their original geographic coverage.** The script
+collects Schengen-relevant sources, not a unified Schengen-filtered training table.
+Before training, resolve both endpoints to countries, exclude non-Schengen routes,
+handle overseas territories separately, and preserve unresolved endpoints for review
+rather than guessing. There is no verified free all-country/all-mode coverage.
+No prices are generated, currency-converted or merged, and no estimator is trained.
+UK fare feeds, commercial OAG fares and datasets containing estimated air prices
+are deliberately excluded; the manifest records these reasons.
+
+Reruns reuse sources whose recorded local checksums still match. `--refresh` fetches
+current upstream snapshots again; there is no automatic expiry. Downloads are staged
+per source before publication; interrupted/failed network downloads preserve old
+artifacts, and source failures do not stop other sources. The manifest is atomically
+replaced after every source. Simultaneous writers to the same output directory are
+not supported. HTTP uses `--timeout` (default 60 seconds per socket operation) and
+`--max-bytes` (default 2 GiB per file). The Kaggle SDK handles its own transfer limits
+and timeouts; these options do not bound its archive transfer. HTTP downloads do not
+retry automatically. Custom output directories are not automatically git-ignored.
+Stdout is a JSON summary; progress and sanitized diagnostics go to stderr. Exit status
+is 1 if any selected source fails, 2 for invalid arguments, otherwise 0. Ordinary
+unit tests are offline; running the downloader explicitly makes live network requests.
+
+## Extract Schengen pricing into DuckDB
+
+```sh
+just extract-pricing
+# Equivalent, or use custom local inputs/output:
+uv run --project backend --locked python -m backend.infrastructure.fixtures.extract_pricing \
+  --fixtures-dir backend/src/backend/infrastructure/fixtures/data \
+  --output backend/src/backend/infrastructure/fixtures/data/pricing/schengen_pricing.duckdb
+```
+
+This is an **offline** extraction. All inputs are under the fixture data directory;
+pricing downloads now default to `fixtures/data/pricing/`, alongside the existing
+city, airport and station references. The earlier pricing downloads have been moved
+there. No schedule database or synthetic graph is modified. Pandas is a runtime
+backend dependency for streamed Stata ingestion; no new package version is introduced.
+
+The default output is the separate, git-ignored
+`backend/src/backend/infrastructure/fixtures/data/pricing/schengen_pricing.duckdb`.
+Its tables are:
+
+| Table | Contents |
+| --- | --- |
+| `pricing` | Fares/tariff bounds whose **both endpoints** resolve to Schengen members. Includes source row identity, mode, price semantics, endpoint countries, EUR prices, observation counts, source date/month strings and complete original row JSON. |
+| `review` | Unresolved/ambiguous endpoints or invalid prices/counts; original row and rejection reason retained. These rows are not approved Schengen fares. |
+| `gtfs_fare_records` | GTFS fare attributes, rules, products, transfer/leg rules, media, rider categories, areas, networks and timeframes, namespaced by feed. Complete original fields retained as JSON strings, preserving IDs and decimals. |
+| `gtfs_context` | Fare-bearing feeds' route modes, stop/zone relationships, agencies and service calendars. Explicit projection; unrelated schedule fields are omitted. |
+| `country_summaries` | Flight destination-country aggregates for Schengen members. Origins may be anywhere; these are separate from Schengen-to-Schengen fares. |
+| `sources` | Input paths, SHA-256, upstream/license metadata where available, input/accepted/outside/review counts and processing status. Missing catalogued GTFS archives and unparsed reports are recorded explicitly. |
+| `extraction` | Schema version, extraction timestamp, geography/matching policy, missing pricing-source directories and excluded input categories. |
+
+Supported pricing inputs are the downloaded flight route/month and route aggregates,
+SNCF tariff JSON, FlixBus Stata data, Renfe CSVs (including CSV members in ZIPs), and
+fare tables inside the existing Mobility Database GTFS archives. Synthetic graph
+weights, the Indian domestic airfare CSV, and global booking-window aggregates
+are excluded. PDF reports are inventoried, not interpreted as raw fare tables.
+Missing source directories are allowed and recorded; malformed present inputs fail
+the build. Renfe coverage depends on whether its dataset has been downloaded.
+
+Flights resolve IATA/airport-city names against the local airport catalogue first,
+then the city catalogue. Rail resolves station UIC codes first (including the
+catalogue's seven-digit UIC representation), then names. European coach endpoints also use station names as geographic references. Other
+names use exact accent/case-insensitive matching and explicit language aliases such as Hanover /
+Hannover and Brunswick / Braunschweig. Ambiguous matches go to `review`; no fuzzy
+matching or population-based guess is used. Geography follows source country and
+territory metadata, with airport locations outside Europe excluded for member-country
+codes. It does not perform polygon-based territorial or border-transit validation.
+The member set is the current 29-country Schengen area, including Bulgaria/Romania.
+
+GTFS selection means **at least one feed location is in Schengen**. These feed-wide
+fare products can cover multiple countries or modes, and are **not endpoint-verified
+route fares**. They remain separate from `pricing`; evaluating a payable itinerary
+requires the retained fare rules and service context. Missing GTFS field values
+remain distinguishable from explicit empty strings in the retained JSON.
+
+Amounts use `DECIMAL(38,18)` without rounding, converting from source decimal text.
+Stata floating-point artifacts are preserved rather than silently rounded to cents.
+`price` is the flight median, FlixBus's per-seat `fare` (not cumulative `totalfare`),
+or Renfe's advertised price, depending on `kind`. SNCF populates `price_min` and
+`price_max`, leaving `price` NULL. Route/month and whole-route flight aggregates
+can overlap: do not sum their observation counts or treat them as independent
+quotes. FlixBus seat-position rows and parallel offers are preserved individually.
+Dates retain their source representation and timezone precision; naive dates are
+not relabeled as UTC. Licenses and historical coverage still constrain reuse.
+
+Example queries:
+
+```sql
+SELECT mode, kind, count(*) AS rows FROM pricing GROUP BY mode, kind;
+SELECT origin, destination, departure_month, price, price_min, p10
+FROM pricing
+WHERE kind = 'route_month_aggregate' AND origin_country = 'LT';
+SELECT source_id, reason, count(*) FROM review GROUP BY source_id, reason;
+SELECT source_id, raw_json->>'fare_product_id' AS product,
+       raw_json->>'amount' AS amount, raw_json->>'currency' AS currency
+FROM gtfs_fare_records WHERE table_name = 'fare_products';
+```
+
+Records are inserted in batches of at most 10,000; DuckDB uses one query thread
+and a 512 MB query-memory limit (not a total process-memory limit). Renfe archive
+members stream into a controlled temporary filename without extracting archive
+paths. Rebuilds use a temporary database and publish only after success; a failure
+preserves the previous database. Existing unrelated databases cannot be overwritten.
+An exclusive `.lock` file prevents concurrent writers; after a killed process,
+remove a stale lock only after confirming no extractor is running. Close readers
+before rebuilding and reopen them afterward. There is no incremental/resume mode;
+reruns replace the pricing snapshot instead of appending duplicates. Stdout is a
+JSON row-count summary, diagnostics go to stderr, and failures return exit status 1.
+
+## Forecast prices instead of mock prices
+
+The implementation plan and model limitations are documented in
+[`docs/pricing/forecasting.md`](../docs/pricing/forecasting.md).
+
+```sh
+just extract-pricing
+just train-pricing
+uv run --project backend --locked python -m backend.presentation.cli.round_trip \
+  --request backend/examples/round_trip_forecast.json --as-of 2026-11-14
+# Inspect/fit custom inputs without network access:
+just train-pricing --database ./pricing.duckdb --fixtures-dir ./fixtures \
+  --output ./forecast_models.json --information-date 2026-11-14
+```
+
+`train-pricing` fits independent `FlightModel`, `RailModel`, `BusModel` and
+`FerryModel` artifacts into git-ignored `fixtures/data/pricing/forecast_models.json`.
+No training runs during search; model loading is cached by file path/mtime/size.
+Models are versioned JSON, never pickles. Training is deterministic for identical
+input data, reference files and information date, and replaces the artifact only
+after successful fitting and validation. The information date defaults to the
+pricing extraction's UTC date; earlier dates are rejected to avoid treating a
+future snapshot as historical evidence. Serving `--as-of` defaults to today's
+local date and cannot precede the artifact's information date. Departure dates
+cannot precede `as_of`. Every input fingerprint, source/license metadata and
+validation result is retained in the artifact. Currency is EUR with no inferred FX.
+
+| Model | Fitted evidence and serving policy |
+| --- | --- |
+| Flights | Directional route/month medians only; exact departure year/month if covered, otherwise the observed route baseline. Whole-route and country aggregates are excluded to avoid overlap. No annual seasonality or booking-lead effects are invented. |
+| Buses | First-seat observations grouped by route/query date/departure service; median within route/lead-time buckets, then route baseline. Other seat positions and cumulative fares are excluded. The local evidence is from 2017 and forecasts warn about its age. |
+| Trains | Normal, second-class SNCF tariff bounds mapped from UIC stations to nearby reference cities. Median tariff midpoint with published minimum/maximum range. This is a tariff estimator, not a validated observed-price forecaster. |
+| Ferries | EUR GTFS V1 products with explicit feed/route identity and no geographic constraints on any rule for the product. Duplicate conflicting price/currency definitions, zone-constrained fares and ambiguous route modes are excluded. The caller must supply feed/route identifiers; exact products remain preferred; v2 can estimate an unknown route within the same feed using a screened distance fit. |
+
+Forecasts contain a point estimate, descriptive lower/upper range, model ID,
+sample-unit count, evidence dates where known, matching basis and limitations.
+Flight ranges describe variation in observed route/month medians, not the spread
+of individual tickets. Bus ranges describe grouped observed first-seat prices.
+Rail/ferry ranges describe tariff/product differences. None is a calibrated future
+prediction interval. Estimates are multiplied by 1–9 adult travelers and then
+rounded to cents using `ROUND_HALF_UP`; lower/upper bounds round outward. Group
+discounts, baggage, taxes not represented by the source, and inflation adjustments
+are not invented. Historical prices alone do not establish current availability.
+
+The default round-trip CLI now uses forecast EUR prices over the existing synthetic
+schedule fixture. Unsupported purchase units are omitted with reasons in
+`unpriced_offers`; forecast evidence is in the envelope's `forecast_evidence`.
+A bundled ticket is repriced once, not once per segment; mixed-mode bundles require
+a provider quote. The solver, generated GraphQL schema and reference graph weights
+remain unchanged. Missing/invalid artifacts fail clearly and never fall back to
+mock prices. Use `--models` for a custom artifact. `--pricing mock` explicitly
+retains the original USD fixture behavior; the verbose `demo-round-trip` command
+and explicitly named mock fixture APIs remain synthetic test/demo tools.
+
+Both reactive notebooks default to forecast prices. The algorithm notebook offers
+**Forecast EUR / Explicit mock USD**, preserves directed parallel reference edges,
+filters unsupported connections before generating demo timetables, and exposes
+model evidence/skipped connections in `demo.forecast_diagnostics`. Its forecast
+adapter shares the backend models; mock mode remains self-contained for offline
+solver tests. Changing the sample seed changes the synthetic timetable, not the
+price model. `03_reactive_demo.ipynb` shares the same forecaster and uses EUR budgets.
+These notebooks still generate synthetic schedules and are not booking interfaces.
+
+Validation is source-specific: flights hold out each route's last departure month
+and report supported-unit MAE/coverage, explicitly **not** a historical booking-time
+backtest. Buses hold out the last query dates after grouping service/query units and
+compare the lead model with a route-median baseline. The artifact is refitted on
+all eligible units afterward. Rail/ferry observed-price validation is unavailable
+because their targets are tariffs/products, and is labelled accordingly. Current
+coverage and metrics are printed as JSON by `train-pricing`; limited local route
+coverage is not silently generalized to all of Schengen.
+
+
+### Distance-aware model revision
+
+`just train-pricing` now consumes the local `fixtures/data/base_graph.pickle` and
+writes version-2 models. Use `--graph /path/to/base_graph.pickle` for another local
+snapshot; the graph and source data are fingerprinted and not modified. Graph
+edge distance is preferred; the same city-centre great-circle metric is derived
+from unique graph endpoint coordinates when a fare spans intermediate cities.
+No road/rail mileage or service availability is inferred from that distance.
+
+Independent per-mode log-distance regressions estimate previously unpriced routes
+within a directional country pair, or the same ferry feed. Route/month and
+route/lead evidence, published rail bounds and exact ferry products remain
+preferred. Each route has equal fit weight. Fits require at least three routes,
+varying distances, supported route-grouped holdout predictions, and MAE no worse
+than the corresponding scope median. Sparse or losing fits remain disabled.
+Estimation is limited to the fitted distance range and geographic scope. Historical
+bus data and tariff-derived rail/ferry labels retain their original limitations.
+
+Serving loads the compact graph feature index from the artifact; it does not load
+the entire graph per request. The graph notebook passes each edge's distance
+directly. Other callers infer it by matched graph city names/countries. The batch
+JSON boundary also accepts optional finite nonnegative `distance_km` in the same
+great-circle basis. Returned forecasts identify the distance and its source.
+Version-1 artifacts still work with their old route-only policies; retrain to enable
+these features. Full methodology, validation cohort definitions and inference
+limits are in [the forecasting plan](../docs/pricing/forecasting.md).
+
+The round-trip solver also accepts `price_forecaster` and `exact_pricer` ports.
+With both supplied it ranks approximate path totals, checks only the cheapest route,
+and reports any uplift on remaining estimates separately from real fares. Enable
+this in the forecast CLI with `--exact-best --scrappa-places /path/to/places.json`
+(and optionally `--cache-only`). See [one-route provider reconciliation](../docs/pricing/forecasting.md#one-route-provider-reconciliation)
+for reviewed place IDs, advertised-fare limitations, budget behavior, and the
+persistent response/observation cache used to prepare future model updates.

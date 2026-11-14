@@ -25,6 +25,11 @@ setup:
 download-datasets *args:
     uv run --project backend --locked python -m backend.infrastructure.fixtures.download_datasets "$@"
 
+# Manual live Omio probe: just test-omio --date YYYY-MM-DD (uses API credits).
+[positional-arguments]
+test-omio *args:
+    uv run --project backend --locked python -m backend.presentation.cli.test_omio "$@"
+
 # Run the Vilnius round-trip demo with detailed action logs; accepts --seed.
 [positional-arguments]
 demo-round-trip *args:
@@ -42,6 +47,16 @@ download-schedules *args:
 [positional-arguments]
 combine-schedules *args:
     uv run --project backend --locked python -m backend.infrastructure.fixtures.combine_mobilitydatabase "$@"
+
+# Extract local Schengen fares and GTFS fare rules into a separate DuckDB file.
+[positional-arguments]
+extract-pricing *args:
+    uv run --project backend --locked python -m backend.infrastructure.fixtures.extract_pricing "$@"
+
+# Fit independent flight/train/bus/ferry price models from extracted local data.
+[positional-arguments]
+train-pricing *args:
+    uv run --project backend --locked python -m backend.infrastructure.pricing.train "$@"
 
 # Rebuild the complete static EU city graph, including city and transport weights.
 [positional-arguments]

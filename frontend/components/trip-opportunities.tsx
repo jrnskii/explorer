@@ -81,12 +81,14 @@ export function TripOpportunity({
   option,
   rank,
   travelers = 1,
+  priceScope = "adult",
   className,
 }: {
   option: RoundTripOption
   rank?: number
   /** Prices are per adult; the total shown is multiplied by this. */
   travelers?: number
+  priceScope?: "adult" | "party"
   className?: string
 }) {
   const { home, stops, travelSeconds, totalSeconds, modes } = summarize(option)
@@ -110,12 +112,14 @@ export function TripOpportunity({
           <div className="shrink-0 text-right">
             <div className="text-xl font-semibold">
               {formatPrice(
-                String(Number(option.total_price.amount) * travelers),
+                priceScope === "party" ? option.total_price.amount : String(Number(option.total_price.amount) * travelers),
                 option.total_price.currency
               )}
             </div>
             <div className="text-xs text-muted-foreground">
-              {travelers === 1
+              {priceScope === "party"
+                ? `estimated total for ${travelers} ${travelers === 1 ? "traveller" : "travellers"}`
+                : travelers === 1
                 ? "per adult"
                 : `for ${travelers} travellers · ${formatPrice(
                     option.total_price.amount,
@@ -184,10 +188,12 @@ export function TripOpportunity({
 export function TripOpportunities({
   options,
   travelers = 1,
+  priceScope = "adult",
   className,
 }: {
   options: RoundTripOption[]
   travelers?: number
+  priceScope?: "adult" | "party"
   className?: string
 }) {
   return (
@@ -206,6 +212,7 @@ export function TripOpportunities({
           option={option}
           rank={i + 1}
           travelers={travelers}
+          priceScope={priceScope}
         />
       ))}
     </section>

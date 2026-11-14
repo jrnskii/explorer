@@ -90,6 +90,23 @@ class ScrappaError(RuntimeError):
     """Actionable provider/cache error without credentials or upstream body."""
 
 
+def matches_one_way_search(data: dict, params: dict) -> bool:
+    """Require the returned cohort to match before interpreting or labeling fares."""
+    passengers = data.get("passengers")
+    return (
+        data.get("trip_type") == "one_way"
+        and data.get("return_date") is None
+        and all(type(data.get(key)) is int and data[key] == params[key]
+                for key in ("origin_id", "destination_id"))
+        and data.get("date") == params["date"]
+        and data.get("currency") == params["currency"]
+        and isinstance(passengers, dict)
+        and set(passengers) == {"adults", "children", "infants"}
+        and all(type(passengers[key]) is int and passengers[key] == params[key]
+                for key in ("adults", "children", "infants"))
+    )
+
+
 @dataclass(frozen=True)
 class CachedResponse:
     payload: dict
@@ -330,9 +347,14 @@ class ScrappaClient:
                 days = (date.fromisoformat(p[field]) - now.date()).days
                 if days < 0 or (endpoint == "search" and days > 364):
                     raise ValueError(f"{field} is outside the live request horizon")
-        query = urlencode(
-            {k: str(v).lower() if type(v) is bool else v for k, v in p.items()}
-        )
+        wire_params = {
+            k: str(v).lower() if type(v) is bool else v
+            for k, v in p.items()
+            if k != "travel_mode"
+        }
+        if "travel_mode" in p:
+            wire_params["travel_mode[]"] = p["travel_mode"].split(",")
+        query = urlencode(wire_params, doseq=True)
         try:
             status, body = self.transport(
                 "https://scrappa.co/api/omio/" + PATHS[endpoint] + "?" + query,
