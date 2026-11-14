@@ -67,6 +67,24 @@
 
 :root {
   --radius: 0.5625rem;
+  /* Minimal skeuomorphic depth: a soft drop shadow plus a faint top highlight. */
+  --elevation-raised: 0 1px 2px rgb(0 0 0 / 0.1), inset 0 1px 0 rgb(255 255 255 / 0.22);
+  --elevation-pressed: inset 0 1px 2px rgb(0 0 0 / 0.18);
+  --elevation-inset: inset 0 1px 2px rgb(0 0 0 / 0.07);
+  --elevation-card: 0 1px 3px rgb(0 0 0 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.5);
+}
+
+.dark {
+  --elevation-raised: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.08);
+  --elevation-pressed: inset 0 1px 2px rgb(0 0 0 / 0.5);
+  --elevation-inset: inset 0 1px 2px rgb(0 0 0 / 0.3);
+  --elevation-card: 0 1px 3px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="button"] {
+    transition: none;
+  }
 }
 
 @layer base {

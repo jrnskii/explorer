@@ -523,7 +523,7 @@ export function TripInputs({
           type="submit"
           size="lg"
           disabled={!isTripInputsComplete(value) || loading}
-          className="m-1.5 h-14 w-[calc(100%-0.75rem)] self-center rounded-full border-0 px-10 text-lg font-bold lg:h-auto lg:w-auto lg:shrink-0 lg:self-stretch [&_svg:not([class*='size-'])]:size-5"
+          className="m-1.5 h-14 w-[calc(100%-0.75rem)] self-center rounded-full border-0 px-10 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 text-lg font-bold lg:h-auto lg:w-auto lg:shrink-0 lg:self-stretch [&_svg:not([class*='size-'])]:size-5"
         >
           {!loading && <Search aria-hidden />}
           {loading
@@ -585,15 +585,25 @@ export function TripInputs({
           >
             <ComboboxInput
               id={`${id}-budget`}
-              aria-label="Max budget"
+              aria-label="Max. budget"
               inputMode="numeric"
               autoComplete="off"
-              placeholder="Max budget"
-              className="h-8 w-36 rounded-full bg-card dark:bg-card [&_input]:text-sm [&_input]:font-medium"
+              placeholder="Max. budget"
+              className={cn(
+                              "h-8 w-36 rounded-full [&_input]:text-sm [&_input]:font-medium",
+                              value.budget
+                                ? "border-primary bg-primary text-primary-foreground dark:bg-primary [&_input]:text-primary-foreground"
+                                : "bg-card dark:bg-card"
+                            )}
                             showTrigger={false}
             >
               <InputGroupAddon>
-                <InputGroupText className="font-medium text-foreground">
+                <InputGroupText
+                  className={cn(
+                    "font-medium",
+                    value.budget ? "text-primary-foreground" : "text-foreground"
+                  )}
+                >
                   €
                 </InputGroupText>
               </InputGroupAddon>
@@ -643,11 +653,6 @@ export function TripInputs({
         </Field> */}
       </div>
 
-      {value.modes.length === 0 && (
-        <p role="alert" className="text-sm text-destructive">
-          Choose at least one way to travel.
-        </p>
-      )}
 
       {/* Advanced search section (temporarily disabled)
       <Collapsible className="flex flex-col gap-4">
