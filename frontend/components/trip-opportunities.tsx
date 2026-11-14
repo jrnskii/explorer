@@ -1,9 +1,12 @@
+"use client"
+
 import { Fragment } from "react"
-import { ArrowRight, Bus, ChevronDown, Plane, Ship, TrainFront, type LucideIcon } from "lucide-react"
+import { ArrowRight, Bookmark, Bus, ChevronDown, Plane, Ship, TrainFront, type LucideIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+
 import {
   Collapsible,
   CollapsibleContent,
@@ -15,6 +18,7 @@ import type {
   TransportType,
   TripLeg,
 } from "@/generated/schema_v1"
+import { tripId, useSavedTrips } from "@/lib/saved-trips"
 import { cn } from "@/lib/utils"
 
 const MODE: Record<TransportType, { label: string; Icon: LucideIcon }> = {
@@ -43,6 +47,7 @@ function formatDay(iso: string) {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`
 }
 
+
 function formatTime(iso: string) {
   return `${formatDay(iso)}, ${formatClock(iso)}`
 }
@@ -67,6 +72,7 @@ function formatPrice(amount: string, currency: string) {
     return `${amount} ${currency}`
   }
 }
+
 
 function layover(prev: TripLeg, next: TripLeg) {
   const seconds =
@@ -131,17 +137,34 @@ export function TripOpportunity({
 }) {
   const { home, travelSeconds, totalSeconds, departAt, returnAt } =
     summarize(option)
+  const { trips, toggle } = useSavedTrips()
+  const saved = trips.some((t) => t.id === tripId(option))
 
   return (
     <Card className={cn("gap-0 py-0", className)}>
       <Collapsible>
         <div className={CARD_GRID}>
           <div className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
-            <div className="flex flex-wrap items-center gap-1.5 text-sm">
-              {rank === 1 && <Badge>Cheapest</Badge>}
-              <span className="text-muted-foreground">
-                Round trip · {formatDuration(travelSeconds)} travelling
-              </span>
+            <div className="flex items-center gap-2">
+              <div className="flex flex-1 flex-wrap items-center gap-1.5 text-sm">
+                {rank === 1 && <Badge>Cheapest</Badge>}
+                <span className="text-muted-foreground">
+                  Round trip · {formatDuration(travelSeconds)} travelling
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-pressed={saved}
+                aria-label={saved ? "Remove from My trips" : "Save to My trips"}
+                title={saved ? "Remove from My trips" : "Save to My trips"}
+                onClick={() => toggle(option, travelers)}
+              >
+                <Bookmark
+                  aria-hidden
+                  className={cn(saved && "fill-current")}
+                />
+              </Button>
             </div>
 
             <div className="flex items-start gap-3 sm:gap-4">
@@ -192,7 +215,7 @@ export function TripOpportunity({
             <div>
               <div className="text-xs text-muted-foreground">
                 {travelers === 1
-                  ? "Total per adult"
+                  ? "Price per adult"
                   : `Total for ${travelers} travellers`}
               </div>
               <div className="text-2xl font-semibold">
@@ -211,15 +234,26 @@ export function TripOpportunity({
                 </div>
               )}
             </div>
-            <CollapsibleTrigger
-              render={<Button size="lg" className="group w-full" />}
-            >
-              Travel details
-              <ChevronDown
-                aria-hidden
-                className="transition-transform group-aria-expanded:rotate-180 motion-reduce:transition-none"
-              />
-            </CollapsibleTrigger>
+            <div className="flex w-full">
+              <Button size="lg" className="flex-1 rounded-r-none">
+                Book
+              </Button>
+              <CollapsibleTrigger
+                render={
+                  <Button
+                    size="icon-lg"
+                    aria-label="Travel details"
+                    title="Travel details"
+                    className="group rounded-l-none border-l border-primary-foreground/30"
+                  />
+                }
+              >
+                <ChevronDown
+                  aria-hidden
+                  className="transition-transform group-aria-expanded:rotate-180 motion-reduce:transition-none"
+                />
+              </CollapsibleTrigger>
+            </div>
           </div>
         </div>
 
@@ -237,9 +271,7 @@ export function TripOpportunity({
                   )}
                   <div className="flex items-center gap-3 rounded-lg px-1 py-2">
                     <span
-                      className={cn(
-                        "flex size-7 shrink-0 items-center justify-center rounded-full bg-muted"
-                      )}
+                      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted"
                       title={label}
                     >
                       <Icon className="size-4" />
@@ -282,7 +314,7 @@ export function TripOpportunities({
       aria-label="Travel opportunities"
       className={cn("flex flex-col gap-3", className)}
     >
-      <h2 className="text-sm font-medium text-muted-foreground">
+      <h2 className="text-sm font-medium text-white">
         {options.length === 0
           ? "No travel opportunities match your search"
           : `${options.length} travel ${options.length === 1 ? "opportunity" : "opportunities"}`}

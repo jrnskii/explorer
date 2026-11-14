@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { render, screen, within } from "@testing-library/react"
 import { describe, expect, test } from "vitest"
 
 import {
@@ -24,9 +24,10 @@ describe("TripOpportunities", () => {
     }
   })
 
-  test("hides travel details in a collapsible panel until expanded", async () => {
+  test("Book is a split button whose dropdown toggles the travel details", async () => {
     const user = userEvent.setup()
     render(<TripOpportunities options={SAMPLE_OPTIONS.slice(0, 1)} />)
+    expect(screen.getByRole("button", { name: "Book" })).toBeEnabled()
     const trigger = screen.getByRole("button", { name: "Travel details" })
     expect(trigger).toHaveAttribute("aria-expanded", "false")
     expect(screen.queryByText("Riga", { selector: "li span" })).toBeNull()
@@ -69,6 +70,7 @@ describe("TripOpportunities", () => {
     render(<TripOpportunities options={SAMPLE_OPTIONS.slice(0, 1)} />)
     expect(screen.getByText("07:00")).toBeInTheDocument()
     expect(screen.getByText("23:15")).toBeInTheDocument()
+    expect(screen.getByText("Price per adult")).toBeInTheDocument()
     expect(screen.getByText("€89.90")).toBeInTheDocument()
   })
 

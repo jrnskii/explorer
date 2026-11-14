@@ -23,9 +23,9 @@ const EuropeOsmMap = dynamic(() => import("@/components/europe-osm-map"), {
 })
 
 // How long the routes take to fade when the search ends.
-const FADE_MS = 700
+const FADE_MS = 350
 // Pause between two rounds of routes while the search is still running.
-const ROUND_PAUSE_MS = 400
+const ROUND_PAUSE_MS = 200
 const MAX_REAL_DESTINATIONS = 8
 
 // Moving light, built from stacked dashes sharing one head: a trail that fades
@@ -51,7 +51,7 @@ const GLOW_LAYERS = [
 ]
 
 const CSS = `
-.eu-root { --eu-route: #7fff00; --eu-ruby: var(--eu-route); --eu-silver: var(--eu-route) }
+.eu-root { --eu-route: #ffffff; --eu-ruby: var(--eu-route); --eu-silver: var(--eu-route) }
 @keyframes eu-draw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
 @keyframes eu-beam { 0% { stroke-dashoffset: var(--len); opacity: 0 } 6% { opacity: 1 } 90% { opacity: 1 } 100% { stroke-dashoffset: calc(var(--len) - ${1 + TRAIL}); opacity: 0 } }
 @keyframes eu-fade { from { opacity: 1 } to { opacity: 0 } }
@@ -64,10 +64,10 @@ const CSS = `
 .eu-draw, .eu-glow { stroke-dasharray: 1; stroke-dashoffset: 1; animation: eu-draw var(--draw) linear var(--delay) forwards }
 .eu-beam { stroke-linecap: butt; stroke-dasharray: var(--len) 3; stroke-dashoffset: var(--len); opacity: 0; animation: eu-beam var(--beam) linear var(--delay) forwards }
 .eu-life { animation: eu-fade ${ROUTE_FADE_MS}ms ease-in var(--fade-delay) forwards }
-.eu-arrive { fill: var(--eu-ruby); transform-box: fill-box; transform-origin: center; opacity: 0; animation: eu-arrive 900ms ease-out var(--arrive-delay) both }
+.eu-arrive { fill: var(--eu-ruby); transform-box: fill-box; transform-origin: center; opacity: 0; animation: eu-arrive 450ms ease-out var(--arrive-delay) both }
 .eu-fade-out { animation: eu-fade ${FADE_MS}ms ease-in-out forwards }
-.eu-ripple { transform-box: fill-box; transform-origin: center; opacity: 0; animation: eu-ripple 2.2s ease-out infinite }
-.eu-label { animation: eu-blink 1.6s ease-in-out infinite }
+.eu-ripple { transform-box: fill-box; transform-origin: center; opacity: 0; animation: eu-ripple 1.1s ease-out infinite }
+.eu-label { animation: eu-blink .8s ease-in-out infinite }
 @media (prefers-reduced-motion: reduce) {
   .eu-draw, .eu-glow { animation: none; stroke-dashoffset: 0 }
   .eu-beam, .eu-arrive { display: none }
@@ -205,6 +205,9 @@ function EuropeLoaderRoutes({
             const to = project(r.to)
             return { route: r, to, d: arcPath(project(r.from), to) }
           })
+          // The origin ripple only belongs to the animation: shown while searching
+          // and while the last round fades out, hidden otherwise.
+          const active = loading || round !== null
           return (
             <svg
               width={width}
@@ -274,8 +277,13 @@ function EuropeLoaderRoutes({
                 </g>
               )}
 
-              {origin !== null && (
-                <g fill="none" stroke="currentColor" strokeWidth={1.5}>
+              {active && origin !== null && (
+                <g
+                  className={loading ? undefined : "eu-fade-out"}
+                  fill="none"
+                  stroke="var(--eu-route)"
+                  strokeWidth={1.5}
+                >
                   {[0, 1.1].map((delay) => {
                     const [cx, cy] = project(points[origin])
                     return (
@@ -291,20 +299,6 @@ function EuropeLoaderRoutes({
                   })}
                 </g>
               )}
-
-              <g className="stroke-background" strokeWidth={1.5}>
-                {places.map((place, i) => {
-                  const [cx, cy] = project(points[i])
-                  return (
-                    <g key={place.name}>
-                      <title>
-                        {place.country ? `${place.name}, ${place.country}` : place.name}
-                      </title>
-                      <circle cx={cx} cy={cy} r={3.5} fill="currentColor" />
-                    </g>
-                  )
-                })}
-              </g>
 
               {/* Destination dots light up as the beam arrives. */}
               {round && drawn && (

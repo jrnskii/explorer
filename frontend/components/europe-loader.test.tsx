@@ -73,6 +73,18 @@ describe("EuropeLoader route shimmer", () => {
     expect(container.querySelectorAll("filter, [filter]")).toHaveLength(0)
   })
 
+  test("does not draw capital dots", () => {
+    const dots = (c: HTMLElement) => c.querySelectorAll('svg circle[r="3.5"]')
+    const { container, rerender } = render(<EuropeLoader loading={false} />)
+    expect(dots(container)).toHaveLength(0)
+
+    rerender(<EuropeLoader loading />)
+    act(() => void vi.advanceTimersByTime(50))
+    expect(dots(container)).toHaveLength(0)
+    // Routes are still drawn.
+    expect(lines(container).length).toBeGreaterThan(0)
+  })
+
   test("uses real destinations when provided", () => {
     const { container } = render(
       <EuropeLoader

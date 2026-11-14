@@ -20,7 +20,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { lookupIpOrigin } from "@/lib/ip-origin"
+import { currencyForCountry, parseCountryCode } from "@/lib/region"
 import { cn } from "@/lib/utils"
+
+type DetectedRegion = { country: string | null; currency: string | null }
+
+/** Edge geo headers via /api/geo first; falls back to a public IP lookup. */
+async function detectRegion(signal: AbortSignal): Promise<DetectedRegion | null> {
+  try {
+    const res = await fetch("/api/geo", { signal })
+    if (res.ok) {
+      const geo = (await res.json()) as DetectedRegion
+      if (geo.country) return geo
+    }
+  } catch {
+    if (signal.aborted) return null
+  }
+  const origin = await lookupIpOrigin(signal)
+  if (!origin) return null
+  const country = parseCountryCode(origin.countryCode)
+  return country ? { country, currency: currencyForCountry(country) } : null
+}
 
 export type RegionOption = { value: string; label: string }
 
@@ -65,6 +86,11 @@ type RegionPreferencesProps = {
   onApply?: (value: RegionPreferencesValue) => void
   countries?: RegionOption[]
   currencies?: RegionOption[]
+  /**
+   * Fetch the visitor's country/currency from `/api/geo` on mount and apply
+   * it, unless the user has already chosen something.
+   */
+  autoDetect?: boolean
   className?: string
 }
 
@@ -79,6 +105,7 @@ export function RegionPreferences({
   onApply,
   countries = COUNTRY_OPTIONS,
   currencies = CURRENCY_OPTIONS,
+  autoDetect = false,
   className,
 }: RegionPreferencesProps) {
   const id = React.useId()
@@ -89,7 +116,37 @@ export function RegionPreferences({
   const [applied, setApplied] = React.useState(defaultValue)
   const [draft, setDraft] = React.useState(defaultValue)
 
+  const touched = React.useRef(false)
+
+  React.useEffect(() => {
+    if (!autoDetect) return
+    const controller = new AbortController()
+    detectRegion(controller.signal)
+      .then((geo) => {
+        if (!geo || touched.current) return
+        const country = countries.some((o) => o.value === geo.country)
+          ? geo.country
+          : null
+        const currency = currencies.some((o) => o.value === geo.currency)
+          ? geo.currency
+          : null
+        if (!country && !currency) return
+        const detected = {
+          country: country ?? defaultValue.country,
+          currency: currency ?? defaultValue.currency,
+        }
+        setApplied(detected)
+        setDraft(detected)
+      })
+      .catch(() => {
+        // Detection is best-effort; keep the defaults on failure.
+      })
+    return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  }, [autoDetect])
+
   function handleOpenChange(next: boolean) {
+    touched.current = true
     setOpen(next)
     if (next) setDraft(applied)
   }

@@ -5,21 +5,19 @@ import {
   CircleHelp,
   House,
   LogIn,
-  Luggage,
   type LucideIcon,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { MyTripsLink } from "@/components/my-trips-link"
+import { buttonVariants } from "@/components/ui/button"
 import { RegionPreferences } from "@/components/region-preferences"
 
 import { cn } from "@/lib/utils"
 
-/** Placeholder entries: the routes don't exist yet. */
-const COMING_SOON: { label: string; icon: LucideIcon }[] = [
-  { label: "Pricing", icon: BadgeDollarSign },
-  { label: "Help", icon: CircleHelp },
-  { label: "Log in", icon: LogIn },
+const NAV_LINKS: { label: string; href: string; icon: LucideIcon }[] = [
+  { label: "Pricing", href: "/pricing", icon: BadgeDollarSign },
+  { label: "Help", href: "/help", icon: CircleHelp },
+  { label: "Log in", href: "/login", icon: LogIn },
 ]
 
 const navButtonClass =
@@ -27,14 +25,11 @@ const navButtonClass =
 
 export function SiteHeader({
   className,
-  savedTripsCount = 0,
   current = "home",
 }: {
   className?: string
   /** Which page the header is rendered on; marks Home as current only on the homepage. */
-  current?: "home" | "help" | "pricing"
-  /** Number of trips the user has saved, shown next to "My trips". */
-  savedTripsCount?: number
+  current?: "home" | "help" | "pricing" | "login" | "my-trips"
 }) {
   return (
     <header
@@ -62,49 +57,25 @@ export function SiteHeader({
           <House aria-hidden strokeWidth={1.5} />
           Home
         </Link>
-        <RegionPreferences />
+        <RegionPreferences autoDetect />
 
-        {COMING_SOON.map(({ label, icon: Icon }) =>
-          label === "Help" || label === "Pricing" ? (
-            <Link
-              key={label}
-              href={label === "Help" ? "/help" : "/pricing"}
-              aria-current={
-                current === label.toLowerCase() ? "page" : undefined
-              }
-              className={cn(buttonVariants({ variant: "ghost" }), navButtonClass)}
-            >
-              <Icon aria-hidden strokeWidth={1.5} />
-              {label}
-            </Link>
-          ) : (
-          <Button
+        {NAV_LINKS.map(({ label, href, icon: Icon }) => (
+          <Link
             key={label}
-            variant="ghost"
-            disabled
-            title="Work in progress"
-            className={navButtonClass}
+            href={href}
+            aria-current={
+              current === href.slice(1) ? "page" : undefined
+            }
+            className={cn(buttonVariants({ variant: "ghost" }), navButtonClass)}
           >
             <Icon aria-hidden strokeWidth={1.5} />
             {label}
-          </Button>
-          )
-        )}
-        <Button
-          variant="ghost"
-          disabled
-          title="Work in progress"
+          </Link>
+        ))}
+        <MyTripsLink
+          current={current === "my-trips"}
           className={navButtonClass}
-        >
-          <Luggage aria-hidden strokeWidth={1.5} />
-          My trips
-          <Badge
-            aria-label={`${savedTripsCount} saved ${savedTripsCount === 1 ? "trip" : "trips"}`}
-            className="bg-badge text-forest"
-          >
-            {savedTripsCount}
-          </Badge>
-        </Button>
+        />
       </nav>
     </header>
   )

@@ -1,8 +1,11 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, test, vi } from "vitest"
 
 import { RegionPreferences } from "./region-preferences"
+
+const lookupIpOrigin = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/ip-origin", () => ({ lookupIpOrigin }))
 
 async function openMenu() {
   const user = userEvent.setup()
@@ -72,4 +75,61 @@ test("trigger is named after the applied currency", async () => {
   await user.click(screen.getByRole("button", { name: "Apply" }))
   expect(trigger).toHaveTextContent("EUR")
   expect(trigger).toHaveAccessibleName("Region preferences, currency EUR")
+})
+
+function mockGeo(body: unknown, ok = true) {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue({ ok, json: () => Promise.resolve(body) })
+  vi.stubGlobal("fetch", fetchMock)
+  return fetchMock
+}
+
+test("autoDetect applies the detected country and currency", async () => {
+  mockGeo({ country: "PL", currency: "PLN" })
+  render(<RegionPreferences autoDetect />)
+  const trigger = screen.getByRole("button", { name: /^Region preferences/ })
+  await waitFor(() => expect(trigger).toHaveTextContent("PLN"))
+
+  await openMenu()
+  expect(screen.getByRole("combobox", { name: "Country/Region" })).toHaveTextContent(
+    "Poland"
+  )
+  vi.unstubAllGlobals()
+})
+
+test("autoDetect keeps defaults when nothing is detected or the request fails", async () => {
+  const fetchMock = mockGeo({ country: null, currency: null })
+  render(<RegionPreferences autoDetect />)
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+  expect(screen.getByRole("button", { name: /^Region preferences/ })).toHaveTextContent(
+    "GBP"
+  )
+  vi.unstubAllGlobals()
+
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")))
+  render(<RegionPreferences autoDetect />)
+  expect(screen.getAllByRole("button", { name: /^Region preferences/ }).at(-1)).toHaveTextContent("GBP")
+  vi.unstubAllGlobals()
+})
+
+test("does not fetch unless autoDetect is set", () => {
+  const fetchMock = mockGeo({ country: "PL", currency: "PLN" })
+  render(<RegionPreferences />)
+  expect(fetchMock).not.toHaveBeenCalled()
+  vi.unstubAllGlobals()
+})
+
+test("autoDetect falls back to the IP lookup when the edge reports no country", async () => {
+  mockGeo({ country: null, currency: null })
+  lookupIpOrigin.mockResolvedValue({ countryCode: "LT", capital: "Vilnius" })
+  render(<RegionPreferences autoDetect />)
+  const trigger = screen.getByRole("button", { name: /^Region preferences/ })
+  await waitFor(() => expect(trigger).toHaveTextContent("EUR"))
+
+  await openMenu()
+  expect(screen.getByRole("combobox", { name: "Country/Region" })).toHaveTextContent(
+    "Lithuania"
+  )
+  vi.unstubAllGlobals()
 })

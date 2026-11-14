@@ -7,18 +7,18 @@ const distance = (a: LonLat, b: LonLat) => geoDistance([a[0], a[1]], [b[0], b[1]
 /** Number of routes animated per round. */
 export const ROUTE_COUNT = 7
 /** Delay between the start of consecutive routes; keeps them overlapping. */
-export const STAGGER_MS = 340
+export const STAGGER_MS = 170
 /** Fraction of the beam's length (relative to the route) that is its trail. */
 export const TRAIL = 0.16
 /** How long a finished route stays before it starts to fade. */
-export const HOLD_MS = 450
+export const HOLD_MS = 225
 /** Duration of the fade of a finished route. */
-export const ROUTE_FADE_MS = 900
+export const ROUTE_FADE_MS = 450
 
 const MIN_DISTANCE = 0.07 // radians (~450 km): shorter hops make dull routes.
 const MAX_PREFERRED_DISTANCE = 0.35 // radians (~2200 km).
-const MIN_BEAM_MS = 1100
-const SPAN_BEAM_MS = 800
+const MIN_BEAM_MS = 550
+const SPAN_BEAM_MS = 400
 
 /** Routes started per city, by depth: the origin fans out, then each arrival continues. */
 export const CASCADE_BRANCHING = [5, 2, 1] as const
@@ -147,7 +147,7 @@ export function planCascade(
         ...timing(from, to, MAX_PREFERRED_DISTANCE, startMs),
       }
       routes.push(route)
-      expand(target, startMs + route.drawMs + 40, depth + 1, new Set([...path, target]))
+      expand(target, startMs + route.drawMs + 20, depth + 1, new Set([...path, target]))
     })
   }
   expand(start, 0, 0, new Set([start]))

@@ -21,12 +21,49 @@ vi.mock("@/lib/europe-cities", () => ({
   popularEuropeCities: () => Promise.resolve([]),
   searchEuropeCities: () => Promise.resolve([]),
 }))
+const { detectDepartureCity } = vi.hoisted(() => ({
+  detectDepartureCity: vi.fn(() => Promise.resolve(null as unknown)),
+}))
+vi.mock("@/lib/ip-origin", () => ({ detectDepartureCity }))
 vi.mock("@/components/trip-inputs", () => ({
   EMPTY_TRIP_INPUTS: { travelers: 3 },
-  TripInputs: ({ onSubmit, value }: { onSubmit: (v: { travelers: number }) => void; value: { travelers: number } }) => (
-    <button onClick={() => onSubmit(value)}>Search</button>
+  TripInputs: ({ onSubmit, value }: { onSubmit: (v: { travelers: number }) => void; value: { travelers: number; departure?: { name: string } | null; date?: Date; duration?: string; budget?: string } }) => (
+    <>
+      <output data-testid="defaults">{`${value.date?.toDateString()}|${value.duration}|${value.budget}`}</output>
+      <output data-testid="departure">{value.departure?.name ?? ""}</output>
+      <button onClick={() => onSubmit(value)}>Search</button>
+    </>
   ),
 }))
+
+describe("Home default trip", () => {
+  afterEach(() => vi.useRealTimers())
+
+  test("starts in 2 days, lasts 3 days, with a 200 EUR budget", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date(2026, 11, 30, 15, 30))
+    render(<Home />)
+    await act(async () => {})
+    expect(screen.getByTestId("defaults")).toHaveTextContent(
+      `${new Date(2027, 0, 1).toDateString()}|3|200`
+    )
+  })
+})
+
+describe("Home departure from IP", () => {
+  test("pre-fills the departure with the detected capital", async () => {
+    detectDepartureCity.mockResolvedValueOnce({ id: "gn-1", name: "Vilnius", country: "Lithuania" })
+    render(<Home />)
+    expect(await screen.findByText("Vilnius")).toBeInTheDocument()
+  })
+
+  test("leaves the departure empty when nothing is detected", async () => {
+    detectDepartureCity.mockResolvedValueOnce(null)
+    render(<Home />)
+    await act(async () => {})
+    expect(screen.getByTestId("departure")).toBeEmptyDOMElement()
+  })
+})
 
 describe("Home search", () => {
   beforeEach(() => vi.useFakeTimers())
@@ -67,4 +104,5 @@ describe("Home search", () => {
     expect(content).not.toHaveClass("opacity-0")
     expect(screen.getByText("Results")).toBeInTheDocument()
   })
+
 })

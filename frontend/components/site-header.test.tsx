@@ -1,7 +1,11 @@
-import { render, screen } from "@testing-library/react"
-import { expect, test } from "vitest"
+import { act, render, screen } from "@testing-library/react"
+import { beforeEach, expect, test } from "vitest"
 
 import { SiteHeader } from "./site-header"
+import { SAMPLE_OPTIONS } from "./trip-opportunities.preview"
+import { saveTrip } from "@/lib/saved-trips"
+
+beforeEach(() => window.localStorage.clear())
 
 test("renders all navigation items", () => {
   render(<SiteHeader />)
@@ -33,14 +37,24 @@ test("each nav item has a decorative icon", () => {
   expect(nav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(6)
 })
 
+test("My trips links to /my-trips in the same tab", () => {
+  render(<SiteHeader current="my-trips" />)
+  const link = screen.getByRole("link", { name: /My trips/ })
+  expect(link).toHaveAttribute("href", "/my-trips")
+  expect(link).toHaveAttribute("aria-current", "page")
+  expect(link).not.toHaveAttribute("target")
+})
+
 test("shows the saved trips count next to My trips", () => {
-  render(<SiteHeader savedTripsCount={3} />)
-  expect(screen.getByLabelText("3 saved trips")).toHaveTextContent("3")
+  saveTrip(SAMPLE_OPTIONS[0])
+  saveTrip(SAMPLE_OPTIONS[1])
+  render(<SiteHeader />)
+  expect(screen.getByLabelText("2 saved trips")).toHaveTextContent("2")
 })
 
 test("defaults to zero saved trips and singular label for one", () => {
-  const { rerender } = render(<SiteHeader />)
+  render(<SiteHeader />)
   expect(screen.getByLabelText("0 saved trips")).toBeInTheDocument()
-  rerender(<SiteHeader savedTripsCount={1} />)
+  act(() => saveTrip(SAMPLE_OPTIONS[0]))
   expect(screen.getByLabelText("1 saved trip")).toBeInTheDocument()
 })

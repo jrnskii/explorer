@@ -61,6 +61,24 @@ export async function searchEuropeCities(query: string, limit = 8): Promise<City
   return buckets.flat().slice(0, limit)
 }
 
+/**
+ * Finds the city called `name` in the country with ISO code `countryCode`.
+ * Resolves to null when it is not in the dataset (e.g. non-European countries).
+ */
+export async function findEuropeCity(
+  name: string,
+  countryCode: string
+): Promise<City | null> {
+  const country = new Intl.DisplayNames(["en"], { type: "region" }).of(
+    countryCode.toUpperCase()
+  )
+  const q = fold(name)
+  if (!q || !country) return null
+  const { cities, folded } = await loadIndex()
+  const i = cities.findIndex((c, n) => folded[n] === q && c.country === country)
+  return i === -1 ? null : cities[i]
+}
+
 /** The most populous European cities, shown before the user types. */
 export async function popularEuropeCities(limit = 8): Promise<City[]> {
   return (await loadIndex()).cities.slice(0, limit)

@@ -55,9 +55,9 @@ describe("planRound", () => {
   test("staggers starts so that routes overlap", () => {
     routes.forEach((r, i) => assert.equal(r.startMs, i * STAGGER_MS))
     assert.ok(routes[0].beamMs > STAGGER_MS)
-    // Starts are spread over roughly 2-3 seconds.
+    // Starts are spread over roughly 1-1.5 seconds.
     const span = routes[routes.length - 1].startMs
-    assert.ok(span >= 1500 && span <= 3000, `span ${span}`)
+    assert.ok(span >= 750 && span <= 1500, `span ${span}`)
   })
 
   test("the beam head reaches the destination before its trail has left", () => {

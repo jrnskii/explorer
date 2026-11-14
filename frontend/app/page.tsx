@@ -14,7 +14,9 @@ import { EuropeLoader } from "@/components/europe-loader"
 import { TripOpportunities } from "@/components/trip-opportunities"
 import { SAMPLE_OPTIONS } from "@/components/trip-opportunities.preview"
 import { cn } from "@/lib/utils"
+
 import { popularEuropeCities, searchEuropeCities } from "@/lib/europe-cities"
+import { detectDepartureCity } from "@/lib/ip-origin"
 
 const CITIES: City[] = [
   { id: "lon", name: "London", country: "United Kingdom", code: "LON", lat: 51.5074, lon: -0.1278 },
@@ -43,6 +45,15 @@ const VIGNETTE =
 
 const MOCK_SEARCH_DELAY_MS = 10000
 
+const DEFAULT_START_OFFSET_DAYS = 2
+const DEFAULT_DURATION = "3"
+const DEFAULT_BUDGET = "200"
+
+/** Local midnight, `days` days after today. */
+function startDateFromToday(days: number, now = new Date()) {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + days)
+}
+
 export default function Home() {
   const [trip, setTrip] = useState<TripInputsValue>(EMPTY_TRIP_INPUTS)
   const [searchedTravelers, setSearchedTravelers] = useState(1)
@@ -58,12 +69,36 @@ export default function Home() {
     }
   }, [])
 
+  // Default trip: leaves in 2 days, lasts 3 days, max 200 EUR. Set after mount
+  // because "today" depends on the visitor's clock and must not differ from the
+  // server-rendered HTML.
+  useEffect(() => {
+    setTrip((t) => ({
+      ...t,
+      date: t.date ?? startDateFromToday(DEFAULT_START_OFFSET_DAYS),
+      duration: t.duration || DEFAULT_DURATION,
+      budget: t.budget || DEFAULT_BUDGET,
+    }))
+  }, [])
+
+  // Pre-fill the departure with the capital of the visitor's IP country,
+  // unless the user picked a city before the lookup finished.
+  useEffect(() => {
+    const controller = new AbortController()
+    detectDepartureCity(controller.signal).then((city) => {
+      if (!city || controller.signal.aborted) return
+      setTrip((t) => (t.departure ? t : { ...t, departure: city }))
+    })
+    return () => controller.abort()
+  }, [])
+
   // Mock search: resolves with sample data after a fixed delay.
   useEffect(() => {
     if (status !== "loading") return
     const timer = setTimeout(() => setStatus("done"), MOCK_SEARCH_DELAY_MS)
     return () => clearTimeout(timer)
   }, [status])
+
 
   return (
     <>
@@ -72,6 +107,7 @@ export default function Home() {
         label="Finding your trip"
         departure={trip.departure}
         loading={status === "loading"}
+
         satellite
       />
       <div
