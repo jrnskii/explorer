@@ -48,6 +48,19 @@ combine-schedules *args:
 build-base-graph *args:
     uv run --project backend --locked python -m backend.presentation.cli.base_graph "$@"
 
+# Serve the base graph notebook as a standalone Voilà website.
+serve-base-graph port="8866":
+    uv run --project backend --locked voila \
+        --no-browser \
+        --Voila.ip=127.0.0.1 \
+        --Voila.port={{ port }} \
+        backend/notebooks/01_eu_graph_visualization.ipynb
+
+# Update the local development flight-route fixture from airline-route-data.
+# The upstream generated JSON is large; this task downloads it without displaying it.
+update-flight-data:
+    curl --fail --location --output backend/src/backend/infrastructure/fixtures/data/airlines/airline_routes.json https://raw.githubusercontent.com/Jonty/airline-route-data/master/airline_routes.json
+
 # Generate Python models and TypeScript types from the v1 GraphQL schema.
 codegen: codegen-python codegen-typescript
 
