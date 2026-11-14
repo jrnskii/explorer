@@ -17,7 +17,7 @@ const CITIES = {
   Rome: { id: "Rome", name: "Rome", latitude: 41.9, longitude: 12.483333 },
 } satisfies Record<string, City>
 
-export const SAMPLE_OPTIONS: RoundTripOption[] = [
+const SAMPLE_ROUTES: Omit<RoundTripOption, "city_stays">[] = [
   {
     total_price: { amount: "89.90", currency: "EUR" },
     path: [
@@ -58,6 +58,28 @@ export const SAMPLE_OPTIONS: RoundTripOption[] = [
     ],
   },
 ]
+
+// Equal-weight stay targets for these synthetic preview routes.
+export const SAMPLE_OPTIONS: RoundTripOption[] = SAMPLE_ROUTES.map((option) => {
+  const home = option.path[0].from
+  const spent = new Map<string, number>()
+  option.path.forEach((leg, index) => {
+    if (leg.to === home) return
+    const next = option.path[index + 1]
+    const seconds = next
+      ? (Date.parse(next.departure_at) - Date.parse(leg.arrival_at)) / 1000
+      : 0
+    spent.set(leg.to, (spent.get(leg.to) ?? 0) + seconds)
+  })
+  const total = [...spent.values()].reduce((sum, seconds) => sum + seconds, 0)
+  return {
+    ...option,
+    stay_fit: null,
+    city_stays: [...spent].map(([city, time_spent]) => ({
+      city, time_spent, target_time: total / spent.size, attractiveness: 1,
+    })),
+  }
+})
 
 export default function TripOpportunitiesPreview() {
   return <TripOpportunities options={SAMPLE_OPTIONS} />

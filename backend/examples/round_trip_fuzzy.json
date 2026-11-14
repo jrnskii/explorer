@@ -1,0 +1,26 @@
+{
+  "departure_city": "pl-warsaw",
+  "mandatory_cities": [
+    "pl-krakow"
+  ],
+  "excluded_cities": [],
+  "transport_types": [
+    "TRAINS",
+    "PLANES"
+  ],
+  "departure_date": "2026-12-01T00:00:00Z",
+  "desired_arrival_date": "2026-12-02T19:00:00Z",
+  "time_tolerance": 180,
+  "expenses_tolerance": {
+    "amount": "200.00",
+    "currency": "USD"
+  },
+  "fuzzy_search": true,
+  "max_trip_duration": 172800,
+  "city_attractiveness": [
+    {
+      "city": "pl-krakow",
+      "weight": 3
+    }
+  ]
+}

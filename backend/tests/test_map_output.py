@@ -99,7 +99,7 @@ class MapOutputTests(unittest.TestCase):
     def test_both_cli_outputs_support_animation_without_geocoding(self):
         request = Path(__file__).parents[1] / "examples" / "round_trip.json"
         commands = (
-            [sys.executable, "-m", "backend.presentation.cli.round_trip_demo"],
+            [sys.executable, "-m", "backend.presentation.cli.round_trip_demo", "--allow-city-revisits"],
             [
                 sys.executable,
                 "-m",

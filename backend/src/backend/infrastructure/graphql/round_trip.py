@@ -22,6 +22,8 @@ def serialize_options(
     return [
         RoundTripOption.model_validate(
             {
+                "city_stays": [asdict(stay) for stay in option.city_stays],
+                "stay_fit": option.stay_fit,
                 "total_price": {
                     "amount": option.total_price.amount,
                     "currency": option.total_price.currency,

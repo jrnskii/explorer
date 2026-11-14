@@ -1,7 +1,7 @@
-"""Bounded exhaustive traversal of a finite, priced schedule snapshot.
+"""Bounded traversal of a finite schedule snapshot with optional fuzzy stay ranking.
 
-No provider calls or shared weight mutations occur during exploration. Cheapest
-means cheapest among supplied offers, and only exhaustive when not truncated.
+No provider calls or shared weight mutations occur during exploration. Price-first
+searches find the cheapest supplied offers only when exploration is not truncated.
 """
 
 from collections import defaultdict
@@ -13,6 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from backend.domain.planning import (
+    CityStay,
     JourneyOffer,
     Money,
     RoundTrip,
@@ -47,7 +48,16 @@ def find_round_trips(
     settings: SearchSettings,
     offers: Iterable[JourneyOffer],
     limits: SearchLimits = SearchLimits(),
+    *,
+    allow_city_revisits: bool = False,
 ) -> SearchResult:
+    """Skip repeated cities per itinerary, except the final return home.
+
+    Internal ticket connections count as visits. Set allow_city_revisits=True
+    explicitly to explore schedules that pass through a city more than once.
+    """
+    if type(allow_city_revisits) is not bool:
+        raise ValueError("allow_city_revisits must be a boolean")
     logger.info(
         "Starting search home=%s mandatory=%s budget=%s %s",
         settings.departure_city,
@@ -146,9 +156,16 @@ def find_round_trips(
                 and set(settings.mandatory_cities) <= visited
                 and earliest <= ready <= latest
             ):
+                candidate = RoundTrip(
+                    chosen, Money(total, settings.expenses_tolerance.currency)
+                )
+                stays, fit = city_stays(candidate, settings)
                 candidates.append(
                     RoundTrip(
-                        chosen, Money(total, settings.expenses_tolerance.currency)
+                        candidate.offers,
+                        candidate.total_price,
+                        stays,
+                        fit if settings.fuzzy_search else None,
                     )
                 )
                 logger.info(
@@ -173,6 +190,19 @@ def find_round_trips(
         for offer in reversed(adjacency[city]):
             logger.debug("Consider next ticket=%s from=%s", offer.id, city)
             destination = offer.path[-1].destination
+            # Track physical arrivals, including connections within one purchase.
+            # The current origin is already visited; leaving it is not a revisit.
+            next_visited = set(visited) | {city}
+            repeated_city = False
+            for index, leg in enumerate(offer.path):
+                final_return = leg.destination == home and index == len(offer.path) - 1
+                if leg.destination in next_visited and not final_return:
+                    repeated_city = True
+                    break
+                next_visited.add(leg.destination)
+            if repeated_city and not allow_city_revisits:
+                logger.debug("Skip ticket=%s: city already visited", offer.id)
+                continue
             if (
                 destination not in reachable
                 or instant(offer.path[0].departure_at) < ready
@@ -223,6 +253,7 @@ def find_round_trips(
 
 def _rank(option: RoundTrip):
     return (
+        -(option.stay_fit if option.stay_fit is not None else 0),
         option.total_price.amount,
         sum(leg.time_in_travel for leg in option.path),
         tuple(offer.id for offer in option.offers),
@@ -238,3 +269,53 @@ def _add_exact(left: Decimal, right: Decimal) -> Decimal:
             + 2
         )
         return left + right
+
+
+def city_stays(
+    option: RoundTrip, settings: SearchSettings
+) -> tuple[tuple[CityStay, ...], float]:
+    """Soft weighted targets; observed gaps never change the supplied schedule.
+
+    Aggregate revisits and internal ticket connections. These are elapsed city
+    times, not a guarantee of usable sightseeing time or terminal access.
+    """
+    path = option.path
+    if not path:
+        return (), 0.0
+    home = settings.departure_city
+    spent = {leg.destination: 0.0 for leg in path if leg.destination != home}
+    for previous, following in zip(path, path[1:]):
+        if previous.destination != home:
+            spent[previous.destination] += (
+                instant(following.departure_at) - instant(previous.arrival_at)
+            ).total_seconds()
+    if not spent:
+        return (), 0.0
+    # Initial waiting at home is not city exploration time. Travel, including
+    # all physical legs of bundled tickets, consumes the available stay budget.
+    target_return = min(
+        instant(settings.desired_arrival_date), settings.return_window[1]
+    )
+    available = max(
+        0.0,
+        (target_return - instant(path[0].departure_at)).total_seconds()
+        - sum(leg.time_in_travel for leg in path),
+    )
+    weights = {item.city: item.weight for item in settings.city_attractiveness}
+    # Scale before summation to avoid overflow for large valid weights.
+    scale = max(weights.get(city, 1.0) for city in spent)
+    normalized = {city: weights.get(city, 1.0) / scale for city in spent}
+    total_weight = sum(normalized.values())
+    stays = tuple(
+        CityStay(
+            city,
+            seconds,
+            available * normalized[city] / total_weight,
+            weights.get(city, 1.0),
+        )
+        for city, seconds in spent.items()
+    )
+    difference = sum(abs(stay.time_spent - stay.target_time) for stay in stays)
+    denominator = sum(spent.values()) + available
+    fit = max(0.0, min(1.0, 1.0 - difference / denominator)) if denominator else 0.0
+    return stays, fit

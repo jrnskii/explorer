@@ -79,6 +79,19 @@ class City(BaseModel):
     name: String
 
 
+class CityStay(BaseModel):
+    attractiveness: Float
+    city: String
+    target_time: Float = Field(
+        ...,
+        description='Approximate target seconds, proportional to attractiveness after travel time.\nBased on target return capped by maximum duration, excluding initial home waiting.',
+    )
+    time_spent: Float = Field(
+        ...,
+        description='Actual elapsed seconds between arrival and next departure, summed over revisits.\nIncludes internal connections; does not guarantee usable sightseeing time.',
+    )
+
+
 class Money(BaseModel):
     amount: Decimal = Field(
         ..., description='Non-negative amount expressed in major currency units.'
@@ -111,6 +124,17 @@ class TripLeg(BaseModel):
     transport_type: TransportType
 
 
+class CityAttractivenessInput(BaseModel):
+    city: String = Field(
+        ...,
+        description='Canonical city identifier, distinct and neither home nor excluded.',
+    )
+    weight: Float = Field(
+        ...,
+        description='Finite strictly positive relative weight. Unspecified cities use 1.',
+    )
+
+
 class MoneyInput(BaseModel):
     amount: Decimal = Field(
         ..., description='Non-negative amount expressed in major currency units.'
@@ -121,6 +145,11 @@ class MoneyInput(BaseModel):
 
 
 class RoundTripSearchInput(BaseModel):
+    city_attractiveness: list[CityAttractivenessInput] = Field(
+        [],
+        description='Soft attractiveness weights; not verified tourism ratings.',
+        validate_default=True,
+    )
     departure_city: String = Field(
         ...,
         description='Non-empty canonical city identifier; also the final destination.',
@@ -141,9 +170,17 @@ class RoundTripSearchInput(BaseModel):
         ...,
         description='Maximum total itinerary price, inclusive of taxes and mandatory fees.\nThis is an absolute budget, not a percentage or an amount above a baseline.',
     )
+    fuzzy_search: Boolean = Field(
+        False,
+        description='Prefer approximate attractiveness-weighted stays instead of price-first ranking.\nNo exact per-city stay is required; infeasible schedules are never relaxed.',
+    )
     mandatory_cities: list[String] = Field(
         [],
         description='Distinct canonical city identifiers that must each be visited at least once.\nTheir order does not constrain the itinerary. Must not contain departure_city.',
+    )
+    max_trip_duration: Int | None = Field(
+        None,
+        description='Hard elapsed limit in seconds from departure_date, including initial waiting.\nPositive when supplied; intersected with the return window.',
     )
     time_tolerance: Int = Field(
         ...,
@@ -155,9 +192,14 @@ class RoundTripSearchInput(BaseModel):
 
 
 class RoundTripOption(BaseModel):
+    city_stays: list[CityStay]
     path: list[TripLeg] = Field(
         ...,
         description='Non-empty list of legs in chronological order. The first leg starts and\nthe last leg ends in departure_city. Each leg starts where the previous\nleg ended, no earlier than its arrival time. All legs use allowed modes.',
+    )
+    stay_fit: Float | None = Field(
+        None,
+        description='Fuzzy similarity in [0, 1], higher is better; null for price-first searches.\nOne minus summed absolute stay error divided by actual plus target stay time.\nZero when no time is available or spent in cities.',
     )
     total_price: Money = Field(
         ...,

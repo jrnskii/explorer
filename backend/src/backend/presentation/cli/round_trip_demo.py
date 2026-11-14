@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--allow-city-revisits",
+        action="store_true",
+        help="Allow routes through previously visited cities (disabled by default).",
+    )
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.DEBUG, format="%(levelname)s %(name)s: %(message)s"
@@ -50,7 +55,8 @@ def main() -> None:
             "Pinned snapshot of %s synthetic offers; invoking solver", len(offers)
         )
         result = find_round_trips(
-            settings, offers, SearchLimits(max_legs=5, max_states=1000, max_results=5)
+            settings, offers, SearchLimits(max_legs=5, max_states=1000, max_results=5),
+            allow_city_revisits=args.allow_city_revisits,
         )
         logger.info("Serializing %s ranked results to JSON stdout", len(result.options))
         print(

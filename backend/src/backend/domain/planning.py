@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import re
+import math
 
 from backend.domain.travel import TransportType
 
@@ -40,6 +41,21 @@ class Money:
 
 
 @dataclass(frozen=True)
+class CityAttractiveness:
+    city: str
+    weight: float
+
+    def __post_init__(self):
+        identifier(self.city)
+        if (
+            type(self.weight) not in (int, float)
+            or not math.isfinite(self.weight)
+            or self.weight <= 0
+        ):
+            raise ValueError("attractiveness must be finite and strictly positive")
+
+
+@dataclass(frozen=True)
 class SearchSettings:
     departure_city: str
     departure_date: datetime
@@ -49,9 +65,24 @@ class SearchSettings:
     transport_types: tuple[TransportType, ...]
     mandatory_cities: tuple[str, ...] = ()
     excluded_cities: tuple[str, ...] = ()
+    max_trip_duration: int | None = None
+    city_attractiveness: tuple[CityAttractiveness, ...] = ()
+    fuzzy_search: bool = False
 
     def __post_init__(self):
         identifier(self.departure_city)
+        if type(self.fuzzy_search) is not bool:
+            raise ValueError("fuzzy_search must be a boolean")
+        if self.max_trip_duration is not None and (
+            type(self.max_trip_duration) is not int
+            or not 1 <= self.max_trip_duration <= 2**31 - 1
+        ):
+            raise ValueError("max_trip_duration must be positive GraphQL Int seconds")
+        weighted_cities = [item.city for item in self.city_attractiveness]
+        if len(set(weighted_cities)) != len(weighted_cities):
+            raise ValueError("attractiveness cities must be distinct")
+        if set(weighted_cities) & {self.departure_city, *self.excluded_cities}:
+            raise ValueError("attractiveness cannot refer to home or excluded cities")
         for cities in (self.mandatory_cities, self.excluded_cities):
             for city in cities:
                 identifier(city)
@@ -82,7 +113,14 @@ class SearchSettings:
         try:
             target = instant(self.desired_arrival_date)
             tolerance = timedelta(minutes=self.time_tolerance)
-            return target - tolerance, target + tolerance
+            latest = target + tolerance
+            if self.max_trip_duration is not None:
+                latest = min(
+                    latest,
+                    instant(self.departure_date)
+                    + timedelta(seconds=self.max_trip_duration),
+                )
+            return target - tolerance, latest
         except OverflowError as exc:
             raise ValueError("return window exceeds supported datetime range") from exc
 
@@ -134,9 +172,19 @@ class JourneyOffer:
 
 
 @dataclass(frozen=True)
+class CityStay:
+    city: str
+    time_spent: float
+    target_time: float
+    attractiveness: float
+
+
+@dataclass(frozen=True)
 class RoundTrip:
     offers: tuple[JourneyOffer, ...]
     total_price: Money
+    city_stays: tuple[CityStay, ...] = ()
+    stay_fit: float | None = None
 
     @property
     def path(self) -> tuple[TripLeg, ...]:

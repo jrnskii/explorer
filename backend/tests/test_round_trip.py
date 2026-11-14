@@ -67,6 +67,52 @@ def payload():
 
 
 class SolverTests(unittest.TestCase):
+    def test_revisits_skipped_by_default_but_final_return_home_allowed(self):
+        offers = [
+            offer("out", "A", "B", 0, 1),
+            offer("bc", "B", "C", 2, 3),
+            offer("cb", "C", "B", 4, 5),
+            offer("home", "B", "A", 9, 10),
+        ]
+        result = find_round_trips(settings(), offers)
+        self.assertEqual([tuple(o.id for o in r.offers) for r in result.options], [("out", "home")])
+        self.assertFalse(result.truncation_reasons)
+        revisits = find_round_trips(settings(), offers, allow_city_revisits=True)
+        self.assertEqual(len(revisits.options), 2)
+
+    def test_internal_ticket_arrivals_cannot_repeat_any_visited_city(self):
+        out = offer("out", "A", "B", 0, 1)
+        home = offer("home", "C", "A", 9, 10)
+        for path in (
+            (leg("B", "C", 2, 3), leg("C", "B", 4, 5), leg("B", "C", 6, 7)),
+            (leg("B", "B", 2, 3), leg("B", "C", 4, 5)),
+        ):
+            with self.subTest(path=path):
+                bundle = replace(out, id="bundle", path=path)
+                offers = [out, bundle, home]
+                self.assertFalse(find_round_trips(settings(), offers).options)
+                self.assertTrue(find_round_trips(settings(), offers, allow_city_revisits=True).options)
+
+    def test_internal_connection_counts_as_visited_on_later_tickets(self):
+        bundle = replace(offer("out", "A", "B", 0, 1),
+                         path=(leg("A", "C", 0, 1), leg("C", "B", 2, 3)))
+        offers = [bundle, offer("bc", "B", "C", 4, 5), offer("home", "C", "A", 9, 10)]
+        self.assertFalse(find_round_trips(settings(), offers).options)
+        self.assertTrue(find_round_trips(settings(), offers, allow_city_revisits=True).options)
+
+    def test_visits_are_per_branch_and_bundled_final_home_is_allowed(self):
+        offers = [offer("slow", "A", "B", 0, 2), offer("fast", "A", "B", 0, 1)]
+        bundle = replace(offers[0], id="home",
+                         path=(leg("B", "C", 3, 4), leg("C", "A", 9, 10)))
+        result = find_round_trips(settings(), [*offers, bundle])
+        self.assertEqual(len(result.options), 2)
+        self.assertEqual({r.offers[0].id for r in result.options}, {"slow", "fast"})
+
+    def test_revisit_flag_must_be_boolean(self):
+        for value in (None, 0, 1, "false"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "boolean"):
+                find_round_trips(settings(), [], allow_city_revisits=value)
+
     def test_price_then_movement_time_parallel_edges_and_budget(self):
         offers = [
             offer("slow", "A", "B", 0, 4),
@@ -166,6 +212,7 @@ class SolverTests(unittest.TestCase):
             settings(desired_arrival_date=START + timedelta(hours=20)),
             offers,
             SearchLimits(max_states=25, max_legs=100),
+            allow_city_revisits=True,
         )
         self.assertEqual(result.states_explored, 25)
         self.assertIn("max_states", result.truncation_reasons)
@@ -328,7 +375,7 @@ class BoundaryAndProviderTests(unittest.TestCase):
 
 
 class VilniusDemoTests(unittest.TestCase):
-    def test_demo_logs_actions_and_returns_repeatable_vilnius_round_trips(self):
+    def test_demo_logs_actions_and_skips_repeated_warsaw_by_default(self):
         command = [sys.executable, "-m", "backend.presentation.cli.round_trip_demo"]
         actual = subprocess.run(command, capture_output=True, text=True, timeout=30)
         self.assertEqual(actual.returncode, 0, actual.stderr)
@@ -336,13 +383,8 @@ class VilniusDemoTests(unittest.TestCase):
         self.assertTrue(result["synthetic"])
         self.assertEqual(result["departure_city"], "lt-vilnius")
         self.assertEqual(result["truncation_reasons"], [])
-        self.assertEqual(
-            result["options"][0]["total_price"], {"amount": "98.00", "currency": "USD"}
-        )
-        for option in result["options"]:
-            self.assertEqual(option["path"][0]["from"], "lt-vilnius")
-            self.assertEqual(option["path"][-1]["to"], "lt-vilnius")
-            self.assertIn("pl-krakow", [leg["to"] for leg in option["path"]])
+        self.assertEqual(result["options"], [])
+        self.assertIn("city already visited", actual.stderr)
         for action in (
             "Loading deterministic demo settings",
             "Mock BUSSES price lookup",
@@ -355,7 +397,6 @@ class VilniusDemoTests(unittest.TestCase):
             "Consider next ticket=",
             "Expand ticket=",
             "Skip ticket=",
-            "Found round trip",
             "Search finished",
             "Serializing",
             "Demo complete",
@@ -365,3 +406,14 @@ class VilniusDemoTests(unittest.TestCase):
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(repeated.stdout, actual.stdout)
         self.assertEqual(repeated.stderr, actual.stderr)
+
+    def test_demo_can_explicitly_allow_city_revisits(self):
+        actual = subprocess.run(
+            [sys.executable, "-m", "backend.presentation.cli.round_trip_demo", "--allow-city-revisits"],
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(actual.returncode, 0, actual.stderr)
+        options = json.loads(actual.stdout)["options"]
+        self.assertEqual(options[0]["total_price"]["amount"], "98.00")
+        for option in options:
+            self.assertEqual([leg["to"] for leg in option["path"]].count("pl-warsaw"), 2)

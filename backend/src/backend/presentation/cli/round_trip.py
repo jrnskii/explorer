@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from backend.application.round_trip_search import SearchLimits, find_round_trips
-from backend.domain.planning import Money, SearchSettings
+from backend.domain.planning import CityAttractiveness, Money, SearchSettings
 from backend.domain.travel import TransportType
 from backend.infrastructure.fixtures.round_trip import (
     CITY_AIRPORTS,
@@ -36,6 +36,12 @@ def parse_settings(payload: str) -> SearchSettings:
         ),
         mandatory_cities=tuple(wire.mandatory_cities),
         excluded_cities=tuple(wire.excluded_cities),
+        max_trip_duration=wire.max_trip_duration,
+        fuzzy_search=wire.fuzzy_search,
+        city_attractiveness=tuple(
+            CityAttractiveness(item.city, item.weight)
+            for item in wire.city_attractiveness
+        ),
     )
 
 
