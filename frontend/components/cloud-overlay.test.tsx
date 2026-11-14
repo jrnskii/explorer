@@ -212,6 +212,62 @@ describe("CloudOverlay dense top", () => {
   })
 })
 
+describe("CloudOverlay density", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  const opacities = (gl: FakeGl) =>
+    gl.uniform1f.mock.calls.filter(([name]) => name === "u_opacity").map(([, v]) => v as number)
+  const frames = () => {
+    const callbacks: FrameRequestCallback[] = []
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      callbacks.push(cb)
+      return callbacks.length
+    })
+    return callbacks
+  }
+
+  test("draws at full opacity by default", () => {
+    const gl = createFakeGl()
+    mockEnvironment({ gl, reducedMotion: false })
+    const callbacks = frames()
+    render(<CloudOverlay />)
+    act(() => callbacks.shift()?.(1000))
+    expect(opacities(gl).at(-1)).toBeCloseTo(0.9)
+  })
+
+  test("eases down to the requested density and back", () => {
+    const gl = createFakeGl()
+    mockEnvironment({ gl, reducedMotion: false })
+    const callbacks = frames()
+    const { rerender } = render(<CloudOverlay />)
+    act(() => callbacks.shift()?.(1000))
+    rerender(<CloudOverlay density={0.75} />)
+    let last = 1000
+    for (let i = 0; i < 40; i++) act(() => callbacks.shift()?.((last += 100)))
+    expect(opacities(gl).at(-1)).toBeCloseTo(0.9 * 0.75, 2)
+    // Eased: some frame lies strictly between the two targets.
+    expect(opacities(gl).some((o) => o < 0.9 - 0.001 && o > 0.9 * 0.75 + 0.001)).toBe(true)
+
+    rerender(<CloudOverlay density={1} />)
+    for (let i = 0; i < 40; i++) act(() => callbacks.shift()?.((last += 100)))
+    expect(opacities(gl).at(-1)).toBeCloseTo(0.9, 2)
+  })
+
+  test("snaps under reduced motion", () => {
+    const gl = createFakeGl()
+    mockEnvironment({ gl, reducedMotion: true })
+    const callbacks = frames()
+    const { rerender } = render(<CloudOverlay />)
+    act(() => callbacks.shift()?.(1000))
+    rerender(<CloudOverlay density={0.75} />)
+    act(() => callbacks.shift()?.(1016))
+    expect(opacities(gl).at(-1)).toBeCloseTo(0.9 * 0.75)
+  })
+})
+
 describe("cloudColor", () => {
   test("picks the palette for each theme", () => {
     expect(cloudColor(false)).toEqual([1, 1, 1])

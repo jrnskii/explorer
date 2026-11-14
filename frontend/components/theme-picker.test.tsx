@@ -93,7 +93,7 @@ test("a saved theme is reflected on first render", () => {
 test("corrupt stored data falls back to the default", () => {
   localStorage.setItem(THEME_STORAGE_KEY, "{not json")
   render(<ThemePicker />)
-  expect(screen.getByRole("button", { name: /currently #345c49/ })).toBeInTheDocument()
+  expect(screen.getByRole("button", { name: /currently #4b6b5b/ })).toBeInTheDocument()
 })
 
 test("boot script injects saved css and ignores unsafe css", () => {

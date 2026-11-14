@@ -127,7 +127,7 @@ export function ThemePicker({ className }: { className?: string }) {
           </div>
           {invalid ? (
             <p id={errorId} role="alert" className="text-xs text-destructive">
-              Enter a hex color such as #345c49.
+              Enter a hex color such as #4b6b5b.
             </p>
           ) : null}
         </div>

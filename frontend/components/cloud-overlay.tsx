@@ -55,16 +55,21 @@ function createProgram(gl: WebGLRenderingContext) {
 export function CloudOverlay({
   className,
   denseTop = false,
+  density = 1,
 }: {
   className?: string
   /** Thickens the clouds along the top edge, easing in and out. */
   denseTop?: boolean
+  /** Multiplies the cloud opacity (1 = normal, 0.75 = a quarter thinner); eases between values. */
+  density?: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const denseTopRef = useRef(denseTop)
+  const densityRef = useRef(density)
   useEffect(() => {
     denseTopRef.current = denseTop
-  }, [denseTop])
+    densityRef.current = density
+  }, [denseTop, density])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -96,7 +101,8 @@ export function CloudOverlay({
     const uColor = gl.getUniformLocation(program, "u_color")
     const uOpacity = gl.getUniformLocation(program, "u_opacity")
     const uTop = gl.getUniformLocation(program, "u_top")
-    gl.uniform1f(uOpacity, OPACITY)
+    let level = densityRef.current
+    gl.uniform1f(uOpacity, OPACITY * level)
     let top = denseTopRef.current ? 1 : 0
     gl.clearColor(0, 0, 0, 0)
 
@@ -125,6 +131,7 @@ export function CloudOverlay({
 
     const draw = () => {
       gl.uniform1f(uTop, top)
+      gl.uniform1f(uOpacity, OPACITY * level)
       gl.uniform1f(uTime, time)
       gl.clear(gl.COLOR_BUFFER_BIT)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
@@ -139,6 +146,9 @@ export function CloudOverlay({
       top = motion?.matches
         ? target
         : top + (target - top) * Math.min(1, dt * TOP_EASE_RATE)
+      level = motion?.matches
+        ? densityRef.current
+        : level + (densityRef.current - level) * Math.min(1, dt * TOP_EASE_RATE)
       last = now
       draw()
       frame = requestAnimationFrame(tick)

@@ -8,7 +8,7 @@ import {
 } from "@/lib/color"
 
 /** Default primary color; matches the `forest` entry in theme/colors.json. */
-export const DEFAULT_PRIMARY = "#345c49"
+export const DEFAULT_PRIMARY = "#4b6b5b"
 
 export const THEME_STORAGE_KEY = "explorer-theme"
 
