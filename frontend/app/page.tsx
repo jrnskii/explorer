@@ -171,10 +171,6 @@ export default function Home() {
           loading={status === "loading"}
           onSubmit={search}
         />
-        <p className="text-sm text-muted-foreground">
-          Sample itineraries with estimated fares. Schedules are illustrative, not bookable.
-          Routes without supported pricing are omitted.
-        </p>
         {status === "error" && <p role="alert">{error}</p>}
         {status === "done" && (
           <TripOpportunities

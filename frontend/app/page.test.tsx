@@ -74,6 +74,7 @@ describe("Home search", () => {
   test("shows everything while idle", () => {
     render(<Home />)
     const content = screen.getByTestId("page-content")
+    expect(screen.queryByText(/Sample itineraries with estimated fares/)).not.toBeInTheDocument()
     expect(content).not.toHaveAttribute("inert")
     expect(content).not.toHaveClass("opacity-0")
   })

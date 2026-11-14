@@ -72,7 +72,7 @@ vi.mock("@/components/site-header", () => ({ SiteHeader: () => null }))
 vi.mock("@/lib/europe-cities", () => ({ popularEuropeCities: async () => [], searchEuropeCities: async () => [] }))
 vi.mock("@/lib/ip-origin", () => ({ detectDepartureCity: async () => null }))
 
-test("page shows loading, renders party totals once, and labels synthetic itineraries", async () => {
+test("page shows loading and renders estimated party totals once", async () => {
   let finish: ((value: Response) => void) | undefined
   fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(implementation(() => new Promise<Response>((resolve) => { finish = resolve })))
   render(<Home />)
@@ -82,7 +82,8 @@ test("page shows loading, renders party totals once, and labels synthetic itiner
   await act(async () => { finish?.(Response.json({ forecasts: payload.queries.map(() => estimate("10.00")) })) })
   expect((await screen.findAllByText("estimated total for 2 travellers")).length).toBeGreaterThan(0)
   expect(screen.getAllByText("€20").length).toBeGreaterThan(0)
-  expect(screen.getByText(/Schedules are illustrative, not bookable/)).toBeDefined()
+  // The disclaimer now lives in TripInputs help, covered by its interaction tests.
+  expect(screen.queryByText(/Schedules are illustrative, not bookable/)).not.toBeInTheDocument()
 })
 
 test("page announces pricing errors and recovers on another submission", async () => {
