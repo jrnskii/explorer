@@ -20,12 +20,9 @@ import { SiteHeader } from "./site-header"
 const slider = () => screen.getByRole("slider", { hidden: true })
 const total = () => screen.getByTestId("custom-total")
 
-test("Pricing nav item links to /pricing in the same tab", () => {
+test("Pricing stays hidden in the navbar on its own page", () => {
   render(<SiteHeader current="pricing" />)
-  const link = screen.getByRole("link", { name: "Pricing" })
-  expect(link).toHaveAttribute("href", "/pricing")
-  expect(link).toHaveAttribute("aria-current", "page")
-  expect(link).not.toHaveAttribute("target")
+  expect(screen.queryByRole("link", { name: "Pricing" })).not.toBeInTheDocument()
 })
 
 describe("custom credit pricing logic", () => {

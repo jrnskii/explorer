@@ -1,10 +1,8 @@
 import Image from "next/image"
 import Link from "next/link"
 import {
-  BadgeDollarSign,
   CircleHelp,
   House,
-  LogIn,
   type LucideIcon,
 } from "lucide-react"
 
@@ -15,9 +13,7 @@ import { RegionPreferences } from "@/components/region-preferences"
 import { cn } from "@/lib/utils"
 
 const NAV_LINKS: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Pricing", href: "/pricing", icon: BadgeDollarSign },
   { label: "Help", href: "/help", icon: CircleHelp },
-  { label: "Log in", href: "/login", icon: LogIn },
 ]
 
 const navButtonClass =

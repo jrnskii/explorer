@@ -5,12 +5,9 @@ import { describe, expect, test } from "vitest"
 import { LoginForm, validateLogin } from "./login-form"
 import { SiteHeader } from "./site-header"
 
-test("Log in nav item links to /login in the same tab", () => {
+test("Log in stays hidden in the navbar on its own page", () => {
   render(<SiteHeader current="login" />)
-  const link = screen.getByRole("link", { name: "Log in" })
-  expect(link).toHaveAttribute("href", "/login")
-  expect(link).toHaveAttribute("aria-current", "page")
-  expect(link).not.toHaveAttribute("target")
+  expect(screen.queryByRole("link", { name: "Log in" })).not.toBeInTheDocument()
 })
 
 describe("validateLogin", () => {

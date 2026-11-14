@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Globe } from "lucide-react"
+import { Coins } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -169,7 +169,7 @@ export function RegionPreferences({
           />
         }
       >
-        <Globe aria-hidden strokeWidth={1.5} />
+        <Coins aria-hidden strokeWidth={1.5} />
         {applied.currency}
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-80 gap-4 p-4">

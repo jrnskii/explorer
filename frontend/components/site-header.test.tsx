@@ -9,8 +9,10 @@ beforeEach(() => window.localStorage.clear())
 
 test("renders all navigation items", () => {
   render(<SiteHeader />)
+  expect(screen.queryByRole("link", { name: "Pricing" })).not.toBeInTheDocument()
+  expect(screen.queryByRole("link", { name: "Log in" })).not.toBeInTheDocument()
   const nav = screen.getByRole("navigation", { name: "Main" })
-  for (const name of ["Home", "GBP", "Pricing", "Help", "Log in", "My trips"]) {
+  for (const name of ["Home", "GBP", "Help", "My trips"]) {
     expect(nav).toHaveTextContent(name)
   }
   expect(
@@ -34,7 +36,7 @@ test("Help links to the FAQ in the same tab", () => {
 test("each nav item has a decorative icon", () => {
   render(<SiteHeader />)
   const nav = screen.getByRole("navigation", { name: "Main" })
-  expect(nav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(6)
+  expect(nav.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(4)
 })
 
 test("My trips links to /my-trips in the same tab", () => {
