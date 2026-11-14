@@ -2,12 +2,12 @@
 
 import argparse
 import json
-import logging
 import sys
 from pathlib import Path
 
 import duckdb
 
+from backend.infrastructure.logging import cli_entrypoint
 from backend.infrastructure.catalog.base_graph import DATA, build_base_graph
 from backend.infrastructure.catalog.graph_snapshot import (
     DEFAULT_GRAPH_PATH,
@@ -16,6 +16,7 @@ from backend.infrastructure.catalog.graph_snapshot import (
 )
 
 
+@cli_entrypoint
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cities", type=Path, default=None)
@@ -55,7 +56,6 @@ def main() -> None:
         parser.error("--from-json cannot be combined with source import options")
     if args.from_json and args.output.resolve() == args.from_json.resolve():
         parser.error("Output must not replace the migration input")
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
         if args.from_json:
             graph = load_base_graph_json(args.from_json)

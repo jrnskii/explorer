@@ -8,14 +8,14 @@ from dataclasses import asdict, replace
 from contextlib import ExitStack
 import os
 
+from backend.infrastructure.logging import cli_entrypoint
 from backend.application.round_trip_search import SearchLimits, find_round_trips
-from backend.domain.planning import CityAttractiveness, Money, SearchSettings
-from backend.domain.travel import TransportType
+from backend.domain.planning import Money
 from backend.infrastructure.fixtures.round_trip import (
     CITY_AIRPORTS,
     MockRoundTripProvider,
 )
-from backend.infrastructure.graphql.models import RoundTripSearchInput
+from backend.infrastructure.graphql.inputs import parse_settings
 from backend.infrastructure.graphql.round_trip import serialize_options
 from backend.infrastructure.fixtures.cities import CITY_LOCATIONS
 from backend.infrastructure.pricing.forecast import DEFAULT_ARTIFACT, load_forecaster
@@ -32,35 +32,7 @@ FORECAST_CITIES = {
 }
 
 
-def parse_settings(payload: str) -> SearchSettings:
-    wire = RoundTripSearchInput.model_validate_json(
-        payload, strict=True, extra="forbid"
-    )
-    raw = json.loads(payload)
-    if not isinstance(raw["expenses_tolerance"]["amount"], str):
-        raise ValueError("Decimal amounts must be encoded as JSON strings")
-    return SearchSettings(
-        departure_city=wire.departure_city,
-        departure_date=wire.departure_date,
-        desired_arrival_date=wire.desired_arrival_date,
-        time_tolerance=wire.time_tolerance,
-        expenses_tolerance=Money(
-            wire.expenses_tolerance.amount, wire.expenses_tolerance.currency
-        ),
-        transport_types=tuple(
-            TransportType(mode.value) for mode in wire.transport_types
-        ),
-        mandatory_cities=tuple(wire.mandatory_cities),
-        excluded_cities=tuple(wire.excluded_cities),
-        max_trip_duration=wire.max_trip_duration,
-        fuzzy_search=wire.fuzzy_search,
-        city_attractiveness=tuple(
-            CityAttractiveness(item.city, item.weight)
-            for item in wire.city_attractiveness
-        ),
-    )
-
-
+@cli_entrypoint
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--request", type=Path, required=True)
@@ -75,7 +47,7 @@ def main() -> None:
     parser.add_argument(
         "--exact-best",
         action="store_true",
-        help="Check only the cheapest forecast route with Scrappa",
+        help="Check the cheapest forecast route, then the runner-up if verification fails",
     )
     parser.add_argument(
         "--scrappa-places",

@@ -6,6 +6,7 @@ from datetime import date
 from decimal import Decimal, localcontext
 import hashlib
 import json
+import logging
 from pathlib import Path
 from statistics import median
 import sys
@@ -14,6 +15,8 @@ import tempfile
 import duckdb
 import networkx as nx
 
+from backend.application.telemetry import event, traced
+from backend.infrastructure.logging import cli_entrypoint
 from backend.domain.travel import TransportType
 from backend.infrastructure.catalog.graph_snapshot import load_base_graph
 from backend.infrastructure.pricing.distance import (
@@ -234,6 +237,7 @@ def blocked_ferry_routes(db):
     ]
 
 
+@traced
 def train(
     database=DEFAULT_DIRECTORY / "pricing/schengen_pricing.duckdb",
     output=DEFAULT_ARTIFACT,
@@ -520,6 +524,9 @@ def train(
             stream.write("\n")
             stream.close()
             temporary.replace(output)
+            event(logging.getLogger("backend.infrastructure.pricing.train"),
+                  "forecast.artifact_published", level=logging.INFO,
+                  model_count=len(artifact["models"]))
         finally:
             temporary.unlink(missing_ok=True)
     return dict(
@@ -544,6 +551,7 @@ def train(
     )
 
 
+@cli_entrypoint
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

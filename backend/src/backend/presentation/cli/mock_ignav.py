@@ -7,9 +7,11 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from backend.infrastructure.logging import cli_entrypoint
 from backend.infrastructure.fixtures.ignav import MockIgnavGenerator
 
 
+@cli_entrypoint
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

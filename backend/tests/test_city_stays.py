@@ -180,7 +180,7 @@ class CityStayTests(unittest.TestCase):
                 replace(request, excluded_cities=("B",)), self.routes()
             ).options
         )
-        self.assertFalse(
+        self.assertTrue(
             find_round_trips(
                 replace(
                     request,

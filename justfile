@@ -113,3 +113,21 @@ codegen-ignav:
 # Generate schema types for the frontend.
 codegen-typescript:
     bun run --cwd frontend codegen
+
+# Authenticated GraphQL API; loads APP_ACCESS_TOKEN from the repository .env.
+api port="8000":
+    uv run --project backend --locked --env-file .env uvicorn backend.presentation.api:app --host 127.0.0.1 --port {{ port }}
+
+# Compile actual GTFS calendars and forecast prices into the serving snapshot.
+[positional-arguments]
+prepare-schedules *args:
+    uv run --project backend --locked python -m backend.infrastructure.schedules.build "$@"
+
+# Build and start production servers for staging; requires a prepared schedule snapshot.
+staging:
+    docker compose --project-name explorer-staging --env-file .env.staging -f compose.staging.yml up --build -d --wait
+
+# Atomically index an existing serving snapshot without repricing or changing its age.
+[positional-arguments]
+optimize-schedules *args:
+    uv run --project backend --locked python -m backend.infrastructure.schedules.optimize "$@"

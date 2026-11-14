@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from datetime import datetime
 import hashlib
+import logging
 
+from backend.application.telemetry import traced, event
 from backend.application.round_trip_search import sum_exact
 from backend.domain.planning import JourneyOffer, Money, TripLeg, instant
 from backend.domain.pricing import (
@@ -23,6 +25,8 @@ MODES = {
     TransportType.TRAINS: "train",
     TransportType.BUSSES: "bus",
 }
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -104,7 +108,10 @@ def _parse(raw, planned, mode, currency, day):
 
 
 class ScrappaRoundTripPricer:
-    def __init__(self, client, place_ids, *, cities=None, cache_only=False):
+    def __init__(self, client, place_ids, *, cities=None, cache_only=False, min_connection_seconds=0):
+        if type(min_connection_seconds) is not int or min_connection_seconds < 0:
+            raise ValueError("min_connection_seconds must be a non-negative integer")
+        self.min_connection_seconds = min_connection_seconds
         self.client, self.place_ids, self.cities, self.cache_only = (
             client,
             dict(place_ids),
@@ -127,6 +134,7 @@ class ScrappaRoundTripPricer:
             amount DECIMAL(38,18), currency VARCHAR, adults INTEGER, children INTEGER, infants INTEGER,
             price_scope VARCHAR, fees_complete BOOLEAN)""")
 
+    @traced
     def quote(self, option, settings):
         # Validate all purchase scopes and mappings before spending any API credit.
         planned = []
@@ -195,12 +203,19 @@ class ScrappaRoundTripPricer:
                     )
                     if service is not None:
                         services.append(service)
+                event(logger, "provider.services_filtered", level=logging.INFO,
+                      origin=offer.path[0].origin, destination=offer.path[-1].destination,
+                      date=params["date"], mode=params["travel_mode"], source=response.source,
+                      returned_count=len(data["results"]) if isinstance(data.get("results"), list) else 0,
+                      usable_direct_services=len(services),
+                      lowest_amount=str(min(s.offer.price.amount for s in services)) if services else None,
+                      currency=params["currency"])
                 if not services:
                     raise ExactPricingUnavailable(
                         "No available direct service matched the selected route date and mode"
                     )
                 searches.append((response, search_id, services))
-            chosen = self._choose_services(searches, settings)
+            chosen = self._choose_services(searches, settings, self.min_connection_seconds)
             quotes = []
             for (original, params), (search, search_id, services), service in zip(
                 planned, searches, chosen, strict=True
@@ -229,6 +244,10 @@ class ScrappaRoundTripPricer:
                     )
                 observed = min(search.fetched_at, response.fetched_at)
                 self._observe(original, current, params, search, response, observed)
+                event(logger, "provider.purchase_verified", level=logging.INFO,
+                      origin=current.offer.path[0].origin, destination=current.offer.path[-1].destination,
+                      amount=str(current.offer.price.amount), currency=current.offer.price.currency,
+                      source=response.source)
                 quotes.append(
                     QuotedPurchase(
                         original.id,
@@ -245,7 +264,8 @@ class ScrappaRoundTripPricer:
             ) from error
 
     @staticmethod
-    def _choose_services(searches, settings):
+    @traced
+    def _choose_services(searches, settings, min_connection_seconds=0):
         # Dynamic programming varies actual services on the ONE selected city/mode
         # path, never quotes another candidate route. At most 100 services per stage.
         states = [(Decimal(0), instant(settings.departure_date), ())]
@@ -258,7 +278,7 @@ class ScrappaRoundTripPricer:
                 compatible = [
                     s
                     for s in states
-                    if s[1] <= instant(service.offer.path[0].departure_at)
+                    if (instant(service.offer.path[0].departure_at) - s[1]).total_seconds() >= (min_connection_seconds if index else 0)
                 ]
                 if not compatible:
                     continue
@@ -288,6 +308,7 @@ class ScrappaRoundTripPricer:
             2
         ]
 
+    @traced
     def _observe(self, original, service, params, search, response, observed):
         origin = self.cities.get(original.path[0].origin, {})
         destination = self.cities.get(original.path[-1].destination, {})

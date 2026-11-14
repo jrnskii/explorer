@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import json
+import logging
 import math
 from pathlib import Path
 import statistics
@@ -20,6 +21,10 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 import duckdb
+
+from backend.application.telemetry import event, traced
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_DATABASE = Path(__file__).resolve().parents[4] / "data" / "scrappa.duckdb"
 MODES = {"train", "bus", "flight"}
@@ -265,6 +270,7 @@ def normalize(endpoint: str, params: dict) -> dict:
 
 
 class ScrappaClient:
+    @traced
     def __init__(
         self,
         database: Path = DEFAULT_DATABASE,
@@ -299,9 +305,11 @@ class ScrappaClient:
     def __exit__(self, *args):
         self.close()
 
+    @traced
     def close(self):
         self.db.close()
 
+    @traced
     def request(
         self,
         endpoint: str,
@@ -330,6 +338,8 @@ class ScrappaClient:
                 [key, now - timedelta(seconds=age), now],
             ).fetchone()
             if row:
+                event(logger, "scrappa.cache_hit", endpoint=endpoint,
+                      response_id=row[2], reusable=bool(row[4]))
                 if not row[4]:
                     raise ScrappaError(
                         f"Cached Scrappa failure (status {row[3]}); response {row[2]}. "
@@ -338,6 +348,8 @@ class ScrappaClient:
                 return CachedResponse(
                     json.loads(row[0]), "cache", datetime.fromisoformat(row[1]), row[2]
                 )
+        event(logger, "scrappa.cache_miss", endpoint=endpoint,
+              cache_only=cache_only, refresh=refresh)
         if cache_only:
             raise ScrappaError("No fresh cached response; no API request was made.")
         if not self.api_key or not self.api_key.strip():
@@ -355,13 +367,17 @@ class ScrappaClient:
         if "travel_mode" in p:
             wire_params["travel_mode[]"] = p["travel_mode"].split(",")
         query = urlencode(wire_params, doseq=True)
+        event(logger, "scrappa.http_request", level=logging.DEBUG,
+              endpoint=endpoint, timeout_seconds=self.timeout)
         try:
             status, body = self.transport(
                 "https://scrappa.co/api/omio/" + PATHS[endpoint] + "?" + query,
                 self.api_key,
                 self.timeout,
             )
-        except Exception:
+        except Exception as error:
+            event(logger, "scrappa.transport_failed", level=logging.WARNING,
+                  endpoint=endpoint, error_type=type(error).__name__)
             # No HTTP body exists. Persist a safe diagnostic, never exception text
             # (which may contain a URL, credentials or other sensitive details).
             status = 0
@@ -389,6 +405,8 @@ class ScrappaClient:
             "INSERT INTO responses VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [response_id, key, endpoint, serialized, now, status, body, valid],
         )
+        event(logger, "scrappa.response_archived", level=logging.DEBUG if valid else logging.WARNING,
+              endpoint=endpoint, response_id=response_id, status=status, reusable=valid)
         if not valid:
             raise ScrappaError(
                 f"Scrappa returned HTTP {status} or an invalid response; archived as {response_id}. No retry attempted."
@@ -413,6 +431,7 @@ class ScrappaClient:
     def route_page(self, **params):
         return self.request("route-page", params)
 
+    @traced
     def estimate(
         self,
         origin_id: int,

@@ -53,6 +53,20 @@ def quote(option, amount="25"):
 
 
 class StagedTests(unittest.TestCase):
+    def test_second_ranked_route_is_used_when_first_quote_fails(self):
+        pricer = Mock()
+        def verify(option, request):
+            if option.offers[0].id == "ab":
+                raise ExactPricingUnavailable("no service")
+            return quote(option, "12")
+        pricer.quote.side_effect = verify
+        result = find_round_trips(settings(), routes(), exact_pricer=pricer)
+        self.assertEqual([c.args[0].offers[0].id for c in pricer.quote.call_args_list], ["ab", "ac"])
+        self.assertEqual(result.pricing.provider_pricing_attempts, 2)
+        self.assertEqual(len(result.options), 1)
+        self.assertEqual(result.options[0].offers[0].id, "ac")
+        self.assertEqual(result.options[0].price_status, "provider_advertised")
+
     def test_only_cheapest_is_checked_and_uplift_is_separate(self):
         pricer = Mock()
         pricer.quote.side_effect = lambda o, s: quote(o)
@@ -71,6 +85,20 @@ class StagedTests(unittest.TestCase):
         )
         self.assertFalse(result.pricing.fees_complete)
         self.assertEqual(result.options[0].price_status, "provider_advertised")
+
+    def test_provider_detail_recheck_preserves_minimum_connection_buffer(self):
+        pricer = Mock()
+        def too_tight(option, request):
+            quoted = quote(option)
+            purchases = list(quoted.purchases)
+            second = purchases[1]
+            earlier = replace(second.offer.path[0], departure_at=START.replace(hour=1, minute=10))
+            purchases[1] = replace(second, offer=replace(second.offer, path=(earlier,)))
+            return replace(quoted, purchases=tuple(purchases))
+        pricer.quote.side_effect = too_tight
+        result = find_round_trips(settings(), routes(), exact_pricer=pricer, min_connection_seconds=1800)
+        self.assertEqual(result.pricing.status, "unavailable")
+        self.assertEqual(pricer.quote.call_count, 2)
 
     def test_lower_actual_needs_no_uplift_and_tie_keeps_checked_first(self):
         for amount in ("5", "15"):
@@ -103,18 +131,18 @@ class StagedTests(unittest.TestCase):
         self.assertEqual(result.options[0].total_price.amount, 4)
         self.assertEqual(result.pricing.unpriced_offer_ids, ("ac",))
 
-    def test_failure_does_not_try_second_route(self):
+    def test_failure_tries_second_route_and_stops(self):
         pricer = Mock()
         pricer.quote.side_effect = ExactPricingUnavailable("unavailable")
-        result = find_round_trips(settings(), routes(), exact_pricer=pricer)
-        pricer.quote.assert_called_once()
+        result = find_round_trips(settings(), (*routes(), offer("ad", "A", "D", 0, 1, "20"), offer("da", "D", "A", 9, 10, "20")), exact_pricer=pricer)
+        self.assertEqual(pricer.quote.call_count, 2)
         self.assertEqual(result.pricing.status, "unavailable")
-        self.assertEqual([o.total_price.amount for o in result.options], [20, 30])
+        self.assertEqual([o.total_price.amount for o in result.options], [20, 30, 40])
         pricer.reset_mock()
         find_round_trips(settings(), (), exact_pricer=pricer)
         pricer.quote.assert_not_called()
 
-    def test_budget_is_applied_after_provider_check(self):
+    def test_over_budget_options_remain_after_provider_check(self):
         pricer = Mock()
         pricer.quote.side_effect = lambda o, s: quote(o, "5")
         result = find_round_trips(
@@ -122,18 +150,17 @@ class StagedTests(unittest.TestCase):
             routes(),
             exact_pricer=pricer,
         )
-        self.assertEqual(len(result.options), 1)
-        self.assertEqual(result.options[0].total_price.amount, 10)
+        self.assertEqual([o.total_price.amount for o in result.options], [10, 30])
         pricer.quote.side_effect = lambda o, s: quote(o)
         result = find_round_trips(
             settings(expenses_tolerance=Money(Decimal(40), "USD")),
             routes(),
             exact_pricer=pricer,
         )
-        self.assertFalse(result.options)
+        self.assertEqual([o.total_price.amount for o in result.options], [50, 60])
         self.assertEqual(result.pricing.status, "over_budget")
 
-    def test_invalid_quotes_rejected_without_second_check(self):
+    def test_invalid_quotes_rejected_for_both_candidates(self):
         for transform in (
             lambda q: replace(q, purchases=q.purchases[:1]),
             lambda q: replace(q, purchases=(q.purchases[0], q.purchases[0])),
@@ -168,7 +195,7 @@ class StagedTests(unittest.TestCase):
                 pricer.quote.side_effect = lambda o, s: transform(quote(o))
                 result = find_round_trips(settings(), routes(), exact_pricer=pricer)
                 self.assertEqual(result.pricing.status, "unavailable")
-                pricer.quote.assert_called_once()
+                self.assertEqual(pricer.quote.call_count, 2)
 
     def test_price_ranking_precedes_fuzzy_retention(self):
         pricer = Mock()
@@ -201,7 +228,7 @@ class StagedTests(unittest.TestCase):
         pricer.quote.side_effect = changed
         result = find_round_trips(settings(), routes(), exact_pricer=pricer)
         self.assertEqual(result.pricing.status, "unavailable")
-        pricer.quote.assert_called_once()
+        self.assertEqual(pricer.quote.call_count, 2)
 
     def test_calibration_preserves_decimal_precision(self):
         pricer = Mock()
@@ -341,7 +368,7 @@ class AdapterTests(unittest.TestCase):
         for _ in range(2):
             result = find_round_trips(settings(), routes(), exact_pricer=self.pricer)
             self.assertEqual(result.pricing.status, "unavailable")
-        self.client.transport.assert_called_once()
+        self.assertEqual(self.client.transport.call_count, 2)
         self.assertEqual(
             self.client.db.execute("SELECT count(*) FROM fare_observations").fetchone()[
                 0
@@ -369,7 +396,7 @@ class AdapterTests(unittest.TestCase):
                         result = find_round_trips(settings(), routes(), exact_pricer=pricer)
                         self.assertEqual(result.pricing.status, "unavailable")
                         self.assertEqual(client.db.execute("SELECT count(*) FROM fare_observations").fetchone()[0], 0)
-                        self.assertEqual(client.db.execute("SELECT count(*) FROM responses").fetchone()[0], 1)
+                        self.assertEqual(client.db.execute("SELECT count(*) FROM responses").fetchone()[0], 2)
 
     def test_wrong_detail_currency_is_not_recorded_as_an_observation(self):
         def wrong_currency(url, key, timeout):
@@ -382,7 +409,7 @@ class AdapterTests(unittest.TestCase):
         result = find_round_trips(settings(), routes(), exact_pricer=self.pricer)
         self.assertEqual(result.pricing.status, "unavailable")
         self.assertEqual(self.client.db.execute("SELECT count(*) FROM fare_observations").fetchone()[0], 0)
-        self.assertEqual(self.client.db.execute("SELECT count(*) FROM responses").fetchone()[0], 3)
+        self.assertEqual(self.client.db.execute("SELECT count(*) FROM responses").fetchone()[0], 5)
 
     def test_probe_and_exact_verification_coexist_and_resume_in_same_database(self):
         from contextlib import redirect_stderr
@@ -452,7 +479,7 @@ class AdapterTests(unittest.TestCase):
         )
         result = find_round_trips(settings(), routes(), exact_pricer=self.pricer)
         self.assertEqual(result.pricing.status, "unavailable")
-        self.client.transport.assert_called_once()
+        self.assertEqual(self.client.transport.call_count, 2)
         self.assertEqual(
             self.client.db.execute("SELECT count(*) FROM fare_observations").fetchone()[
                 0

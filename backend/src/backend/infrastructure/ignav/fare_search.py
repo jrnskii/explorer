@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from backend.application.telemetry import traced
 from backend.domain.fares import FareOffer, FarePrice, FareSearch, FlightSegment
 from backend.infrastructure.ignav.models import FareSearchModel, FareSearchResponseModel
 
@@ -12,6 +13,7 @@ type IgnavResponse = (
 )
 
 
+@traced
 def read_fare_search(response: IgnavResponse) -> FareSearch:
     if isinstance(response, (str, bytes)):
         response = json.loads(response)

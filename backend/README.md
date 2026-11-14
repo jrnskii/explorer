@@ -28,9 +28,10 @@ Provider prices retain their existing float contract; weighted travel costs rema
 
 The fixture envelopes (including `MockFlightNetwork.to_graph`) remain infrastructure
 DTOs: they intentionally use Ignav models and NetworkX, not domain entities.
-There is no live provider adapter, repository, HTTP API, or persistence layer yet;
-none is invented by this layout. Future entry points should compose adapters around
-application use cases rather than putting business logic in transport handlers.
+The GraphQL HTTP API lives in `presentation/api.py`. Schedule snapshot serving and
+Scrappa/Omio adapters live under `infrastructure/schedules` and
+`infrastructure/scrappa`; they compose the application solver and pricing ports.
+Domain search logic stays outside transport handlers.
 
 Use the canonical imports shown below. Legacy flat modules and the `mock`,
 `graphutils`, `models`, and `generated` packages have been removed; old Python
@@ -674,7 +675,7 @@ Waiting is checked for feasibility; default price-first searches break ties
 by summed movement seconds, excluding waiting. Fuzzy city-stay ranking is
 available as described below.
 
-`expenses_tolerance` is the absolute inclusive budget. `time_tolerance` is the
+`expenses_tolerance` is an advisory target budget; over-budget options remain in results. `time_tolerance` is the
 allowed deviation in minutes around the target return instant, including an
 exact match at zero. The earliest departure remains a hard lower bound. All
 instants require explicit UTC offsets. Different currencies are rejected rather
@@ -1279,3 +1280,127 @@ this in the forecast CLI with `--exact-best --scrappa-places /path/to/places.jso
 (and optionally `--cache-only`). See [one-route provider reconciliation](../docs/pricing/forecasting.md#one-route-provider-reconciliation)
 for reviewed place IDs, advertised-fare limitations, budget behavior, and the
 persistent response/observation cache used to prepare future model updates.
+
+## Trace logging
+
+All Python CLI entrypoints and the API share stderr logging. Enable detailed
+operation traces without changing JSON stdout:
+
+```sh
+LOG_LEVEL=TRACE LOG_FORMAT=json just prepare-schedules --source ./schedules.duckdb \
+  --catalog ./cities.json --models ./forecast_models.json --output ./schedules.sqlite
+LOG_LEVEL=TRACE LOG_FORMAT=json just api
+LOG_LEVEL=TRACE LOG_FORMAT=text uv run --project backend --locked python \
+  -m backend.presentation.cli.round_trip --request backend/examples/round_trip_forecast.json
+```
+
+`LOG_LEVEL` accepts `TRACE` (numeric level 5), `DEBUG`, `INFO`, `WARNING`, `ERROR`,
+and `CRITICAL`; `LOG_FORMAT` accepts `text` or `json`. Ordinary CLIs default to
+`WARNING` to preserve quiet machine-readable command use. The API and schedule
+combiner default to `INFO`; the verbose round-trip demo defaults to `DEBUG`.
+`combine-schedules --log-level TRACE` overrides the environment for that command.
+Existing progress and CLI error diagnostics may also appear as plain stderr text.
+For Python/notebook use, call
+`backend.infrastructure.logging.configure_logging(level="TRACE", output_format="json")`.
+Importing backend modules does not configure output or change root logger settings.
+
+Each structured record contains a UTC timestamp, severity, logger, trace ID,
+span ID, event and selected operational fields. Operation traces record start,
+completion/failure, elapsed milliseconds and exception class on failure. Nested calls
+share a trace, with distinct spans and parent IDs. API responses return the
+server-generated trace ID in `X-Request-ID`; incoming IDs are ignored. Context
+follows searches into the API thread pool and GTFS extraction workers, with
+isolation between concurrent requests. Successful health/readiness requests log
+at `DEBUG`; failures remain visible at ordinary levels.
+
+Coverage includes GraphQL validation/authentication/capacity, schedule freshness
+and query limits, traversal and price reconciliation, provider/cache outcomes,
+forecast loading/prediction/training, graph import/serialization, dataset download,
+GTFS extraction and atomic publication. Trace hooks never serialize arguments,
+return payloads, credentials, URLs or exception messages. Existing solver/demo
+diagnostics at `DEBUG` include itinerary details; restrict access to verbose logs
+accordingly. Application logging does not raise third-party verbosity or reconfigure
+Uvicorn's separate server/access logs. This is local correlated logging, with no
+external tracing service or additional dependency.
+
+## Staging GraphQL search API
+
+### Diagnosing empty search results
+
+Search decisions are logged at `INFO`, including local coverage fallback, forecast
+coverage counts, selected candidate rank and route, estimated and verified prices,
+the requested budget, provider cache/API source, usable direct-service counts,
+and final result count. `search.candidate_verified` with `reason=over_budget`
+contains the exact `estimated_amount`, `provider_amount`, and `budget_amount`.
+`provider.services_filtered` distinguishes an empty provider response from a
+response whose services do not satisfy the direct-service verification rules.
+
+For persistent local diagnostics, set these values in the repository `.env`,
+then restart `just api`:
+
+```dotenv
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+LOG_FILE=backend/data/logs/search.jsonl
+```
+
+Logs also go to stderr. The optional file rotates at 5 MB with three backups;
+`backend/data/` is git-ignored. The browser's `/api/round-trip` response includes
+`X-Request-ID`; match it to `trace_id` in the backend log and
+`backend_request_id` in the frontend server's `search.upstream_response` log.
+The proxy logs status and latency, not input payloads, URLs, or credentials.
+Backend diagnostics select explicit fields and never log raw provider payloads
+or exception messages. Set `SCRAPPA_CACHE_ONLY=1` for diagnostic replays that must
+not make paid requests (a missing or stale cached response then fails explicitly).
+
+`just api` serves the shared SDL at `POST /graphql`, with
+`Authorization: Bearer <APP_ACCESS_TOKEN>` required. The configured search reads a
+prepared, indexed schedule snapshot; it does not import mock/demo providers.
+When dated schedules cannot produce candidates, it ranks routes from the local
+reference graph and forecast models, then checks the best route with the
+provider, followed by the second-best if verification fails. Only provider-verified times are returned for reference-route planning.
+Configure `REFERENCE_GRAPH_PATH` and `FORECAST_MODELS_PATH` to override the default
+local artifacts; staging mounts them alongside the schedule snapshot.
+`SCHEDULE_SNAPSHOT_PATH` and `SCRAPPA_API_KEY` are required; `APP_ENV=staging` also
+requires a random access token of at least 32 characters. `/healthz` checks the
+process and `/readyz` checks configuration and snapshot freshness. Missing or
+stale data prevents readiness, without a mock fallback.
+
+Search ranks locally priced routes and calls Scrappa/Omio for **the best opportunity, then the second-best if verification fails**. City lookup is derived from the selected route and full GeoNames
+catalog, with exact country/name matching. The selected route's provider fares,
+actual timetable and price provenance are retained. At most two ranked candidates are checked; successful verification stops the fallback.
+Individual failed requests are not retried automatically. Results carry
+GraphQL `extensions` identifying per-option price status, verification failures,
+search limits, source coverage and the provider fee limitation. Decimal strings,
+aliases and explicit-offset timestamps preserve the shared contract.
+
+Build and refresh actual dated GTFS services with `just prepare-schedules`.
+The compiler applies calendars/exceptions and agency timezones, preserves 24+
+hour offsets and parallel services, and records omitted unsupported/ambiguous
+records. Snapshot publication is atomic; a failed build preserves the current
+published file. The compiler never invents schedules, and omits unpriced services.
+Serving has explicit state/service limits and uses a conservative 30-minute
+inter-purchase connection buffer; city-level plans still require terminal-specific
+transfer and availability confirmation. Static airline graphs are not dated
+flight schedules. See [`docs/staging.md`](../docs/staging.md) for deployment,
+known data boundaries and validation commands.
+
+The web search shifts the entire trip by −1, 0, and +1 calendar days in
+`departure_timezone` (IANA; timestamp offset is the fallback), bounds the first
+departure to each day, and ranks the combined candidates by estimated price.
+It returns up to 10 distinct city/mode/day opportunities. A route must visit at
+least two destinations and cannot revisit a city before the final return home.
+There are no budget or minimum-city controls. The optional legacy
+`expenses_tolerance` and `min_cities` fields remain accepted for old clients;
+web search ignores their filtering preferences. Lower-level solver/CLI consumers
+retain the configurable minimum-city policy.
+
+One pricer instance checks the cheapest estimated candidate, then the runner-up
+only on failure, sharing the provider allowance. The selected ten are sorted by
+shown price after verification. Unchecked candidates are emitted as
+`extensions.estimated_routes` with rank, city IDs/names, planned date-only values,
+price strings and schedule source; these are not bookable timetables.
+`round_trip_options` contains the verified option, with its display rank in
+`extensions.option_pricing`. Both failed checks still return the estimates.
+Exploration limits and unsupported datasets mean this is not a guarantee of the
+cheapest possible trip across all providers.

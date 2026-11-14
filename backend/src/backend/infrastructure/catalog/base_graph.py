@@ -17,6 +17,7 @@ from typing import Mapping
 
 import networkx as nx
 
+from backend.application.telemetry import traced
 from backend.infrastructure.catalog.static_transport import (
     EU_COUNTRIES,
     add_schedules,
@@ -58,6 +59,7 @@ def _route_minutes(value: object) -> float | None:
         return None
 
 
+@traced
 def build_base_graph(
     cities_path: Path = DATA / "cities" / "Cities.csv",
     routes_path: Path = DATA / "airline_routes.json",

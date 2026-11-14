@@ -72,10 +72,11 @@ export type MoneyInput = {
 export type Query = {
   __typename?: 'Query';
   /**
-   * Find round-trip itineraries satisfying the supplied constraints.
-   * By default results are ordered by total price, then movement time.
-   * With fuzzy_search, weighted city-stay fit ranks first, then price and movement time.
-   * Hard schedule, city, budget and return-window constraints always apply.
+   * Web search ranks up to ten local candidates across trip dates shifted by ±1 day.
+   * Routes visit at least two destinations without revisiting intermediate cities.
+   * The best candidate (or runner-up on failure) is provider-checked. Verified
+   * itineraries are returned here; unchecked estimates are in extensions.estimated_routes.
+   * Legacy solver consumers also support fuzzy stay ranking and minimum-city preferences.
    */
   round_trip_options: Array<RoundTripOption>;
 };
@@ -114,6 +115,8 @@ export type RoundTripSearchInput = {
    * Despite the field name, this is a timestamp, not a calendar date.
    */
   departure_date: Scalars['DateTime']['input'];
+  /** IANA timezone for calendar-day flexibility. Defaults to the supplied timestamp offset. */
+  departure_timezone?: InputMaybe<Scalars['String']['input']>;
   /**
    * Target return arrival timestamp at departure_city, strictly after departure_date.
    * Despite the field name, this is a timestamp, not a calendar date.
@@ -125,10 +128,10 @@ export type RoundTripSearchInput = {
    */
   excluded_cities?: Array<Scalars['String']['input']>;
   /**
-   * Maximum total itinerary price, inclusive of taxes and mandatory fees.
-   * This is an absolute budget, not a percentage or an amount above a baseline.
+   * Target total itinerary price, inclusive of taxes and mandatory fees.
+   * Optional legacy advisory value. Web search has no budget constraint or budget badges.
    */
-  expenses_tolerance: MoneyInput;
+  expenses_tolerance?: InputMaybe<MoneyInput>;
   /**
    * Prefer approximate attractiveness-weighted stays instead of price-first ranking.
    * No exact per-city stay is required; infeasible schedules are never relaxed.
@@ -145,9 +148,15 @@ export type RoundTripSearchInput = {
    */
   max_trip_duration?: InputMaybe<Scalars['Int']['input']>;
   /**
+   * Minimum number of distinct visited cities, excluding departure_city.
+   * Legacy solver preference; web search always requires two destinations and no revisits.
+   * Positive integer; internal ticket connections count as visits, revisits count once.
+   */
+  min_cities?: Scalars['Int']['input'];
+  /**
    * Maximum absolute deviation, in minutes, of the final return arrival from
    * desired_arrival_date. Must be non-negative; zero requires an exact match.
-   * This tolerance does not permit departure before departure_date.
+   * Web search shifts departure and return windows together by ±1 calendar day.
    */
   time_tolerance: Scalars['Int']['input'];
   /** Non-empty list of distinct allowed transport modes. */

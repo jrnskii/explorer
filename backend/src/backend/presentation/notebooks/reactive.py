@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from hashlib import sha256
 
+from backend.application.telemetry import traced
 from backend.application.round_trip_search import SearchLimits, find_round_trips
 from backend.domain.planning import JourneyOffer, Money, SearchSettings, TripLeg
 from backend.domain.travel import TransportType
@@ -33,6 +34,7 @@ def mock_scrappa_search(origin, destination, day, mode, travelers):
     }
 
 
+@traced
 def search(
     departure="Vilnius",
     departure_date=None,

@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 import {
   Bus,
   CalendarIcon,
@@ -13,23 +13,20 @@ import {
   TrainFront,
   X,
   type LucideIcon,
-} from "lucide-react"
+} from "lucide-react";
 
-import { CityPicker, type City } from "@/components/city-picker"
+import { CityPicker, type City } from "@/components/city-picker";
 import {
   SEARCH_CONTROL,
   SearchBar,
   SearchSegment,
-} from "@/components/search-bar"
+} from "@/components/search-bar";
 // import { TravelerPicker } from "@/components/traveler-picker"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 // import { Checkbox } from "@/components/ui/checkbox"
-import { Calendar } from "@/components/ui/calendar"
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card"
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Combobox,
   ComboboxContent,
@@ -37,53 +34,58 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
-} from "@/components/ui/combobox"
+} from "@/components/ui/combobox";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
   InputGroupText,
-} from "@/components/ui/input-group"
+} from "@/components/ui/input-group";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { Field, FieldLabel } from "@/components/ui/field"
+} from "@/components/ui/collapsible";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import type { TransportType } from "@/generated/schema_v1"
-import { cn } from "@/lib/utils"
+} from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import type { TransportType } from "@/generated/schema_v1";
+import { cn } from "@/lib/utils";
 
 export type TripInputsValue = {
-  departure: City | null
+  departure: City | null;
   /** Total budget in EUR; empty string when unset. */
-  budget: string
-  date: Date | undefined
+  budget: string;
+  date: Date | undefined;
   /** Trip length in days or a "from-to" range (from the duration options); empty string when unset. */
-  duration: string
+  duration: string;
   /** Whether the user can shift the trip dates. */
-  flexibleDates: boolean
+  flexibleDates: boolean;
   /** Number of travellers. */
-  travelers: number
+  travelers: number;
   /** Allowed transport modes; at least one is required. */
-  modes: TransportType[]
-  /** Number of cities to visit; empty string when unset. */
-  numberOfCities: string
+  modes: TransportType[];
+  /** Minimum distinct cities to visit, excluding departure; empty string when unset. */
+  numberOfCities: string;
   /** Return date; must not be before `date`. */
-  returnDate: Date | undefined
+  returnDate: Date | undefined;
   /** Days to spend in each city; empty string when unset. */
-  daysPerCity: string
+  daysPerCity: string;
   /** Cities the trip must pass through. */
-  mustVisit: City[]
+  mustVisit: City[];
   /** Cities the trip must not touch. */
-  avoid: City[]
-}
+  avoid: City[];
+};
 
 export const EMPTY_TRIP_INPUTS: TripInputsValue = {
   departure: null,
@@ -98,44 +100,36 @@ export const EMPTY_TRIP_INPUTS: TripInputsValue = {
   daysPerCity: "",
   mustVisit: [],
   avoid: [],
-}
+};
 
 const MODE_OPTIONS: {
-  value: TransportType
-  label: string
-  Icon: LucideIcon
+  value: TransportType;
+  label: string;
+  Icon: LucideIcon;
 }[] = [
   { value: "PLANES", label: "Flight", Icon: Plane },
   { value: "TRAINS", label: "Train", Icon: TrainFront },
   { value: "BUSSES", label: "Bus", Icon: Bus },
   // { value: "FERRIES", label: "Ferry", Icon: Ship },
-]
+];
 
-type DurationOption = { value: string; label: string }
+type DurationOption = { value: string; label: string };
 
 const customOption = (days: string): DurationOption => ({
   value: days,
   label: `${days} ${days === "1" ? "day" : "days"}`,
-})
+});
 
 const rangeOption = (from: number, to: number): DurationOption => ({
   value: `${from}-${to}`,
   label: `${from}-${to} days`,
-})
-
-/** Max digits in the budget field (up to 9999). */
-const MAX_BUDGET_DIGITS = 4
-
-/** Budget suggestions in EUR: 50 to 300 in steps of 50. */
-const BUDGET_SUGGESTIONS = Array.from({ length: 6 }, (_, i) =>
-  String((i + 1) * 50)
-)
+});
 
 /** Picking this clears the field so a number of days can be typed. */
 const CUSTOM_DURATION: DurationOption = {
   value: "custom",
   label: "Custom duration",
-}
+};
 
 /** `value` is the trip length in days, or a "from-to" range of days. */
 const DURATION_OPTIONS: DurationOption[] = [
@@ -144,60 +138,59 @@ const DURATION_OPTIONS: DurationOption[] = [
   rangeOption(15, 21),
   rangeOption(22, 30),
   CUSTOM_DURATION,
-]
+];
 
-const MAX_CUSTOM_DAYS = 365
+const MAX_CUSTOM_DAYS = 365;
 
 /** The option for a stored duration: a preset, range, or custom "N days". */
 function optionForDays(days: string): DurationOption | null {
-  if (!days) return null
-  return DURATION_OPTIONS.find((o) => o.value === days) ?? customOption(days)
+  if (!days) return null;
+  return DURATION_OPTIONS.find((o) => o.value === days) ?? customOption(days);
 }
 
 /** Whether a stored duration is a day count or a preset range. */
 function isValidDuration(duration: string) {
-  return Number(duration) > 0 || /^\d+-\d+$/.test(duration)
+  return Number(duration) > 0 || /^\d+-\d+$/.test(duration);
 }
 
 /** Options for the typed text; an integer yields a preset or custom option. */
 function durationItems(query: string, selected: DurationOption | null) {
-  const q = query.trim()
-  if (!q || q === selected?.label) return DURATION_OPTIONS
+  const q = query.trim();
+  if (!q || q === selected?.label) return DURATION_OPTIONS;
   if (/^\d+$/.test(q)) {
-    const days = String(Number(q))
-    if (Number(days) < 1 || Number(days) > MAX_CUSTOM_DAYS) return []
-    return [optionForDays(days)!]
+    const days = String(Number(q));
+    if (Number(days) < 1 || Number(days) > MAX_CUSTOM_DAYS) return [];
+    return [optionForDays(days)!];
   }
-  const lower = q.toLowerCase()
-  return DURATION_OPTIONS.filter((o) => o.label.toLowerCase().includes(lower))
+  const lower = q.toLowerCase();
+  return DURATION_OPTIONS.filter((o) => o.label.toLowerCase().includes(lower));
 }
 
-const dateFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" })
+const dateFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" });
 
 type TripInputsProps = {
-  value: TripInputsValue
-  onChange: (value: TripInputsValue) => void
-  cities: City[]
+  value: TripInputsValue;
+  onChange: (value: TripInputsValue) => void;
+  cities: City[];
   /** Async departure search (e.g. all European cities); falls back to `cities`. */
-  onSearchDeparture?: (query: string, signal: AbortSignal) => Promise<City[]>
+  onSearchDeparture?: (query: string, signal: AbortSignal) => Promise<City[]>;
   /** Departure suggestions shown before the user types. */
-  departureSuggestions?: City[]
+  departureSuggestions?: City[];
   /** Called when the user presses "Find opportunities" with a complete form. */
-  onSubmit?: (value: TripInputsValue) => void
+  onSubmit?: (value: TripInputsValue) => void;
   /** Called instead of `onSubmit` for trips longer than 7 days, which require an account. */
-  onSignUp?: (value: TripInputsValue) => void
-  loading?: boolean
-  className?: string
-}
+  onSignUp?: (value: TripInputsValue) => void;
+  loading?: boolean;
+  className?: string;
+};
 
 export function isTripInputsComplete(v: TripInputsValue) {
   return (
     v.departure !== null &&
-    Number(v.budget) > 0 &&
     v.date !== undefined &&
     isValidDuration(v.duration) &&
     v.modes.length > 0
-  )
+  );
 }
 
 /** Digits-only text field with a unit suffix, e.g. "3 cities". */
@@ -210,13 +203,13 @@ function NumberField({
   value,
   onChange,
 }: {
-  id: string
-  label: string
-  unit: string
-  placeholder: string
-  maxDigits: number
-  value: string
-  onChange: (value: string) => void
+  id: string;
+  label: string;
+  unit: string;
+  placeholder: string;
+  maxDigits: number;
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
     <Field>
@@ -234,7 +227,7 @@ function NumberField({
               e.target.value
                 .replace(/\D/g, "")
                 .replace(/^0+/, "")
-                .slice(0, maxDigits)
+                .slice(0, maxDigits),
             )
           }
         />
@@ -243,7 +236,7 @@ function NumberField({
         </InputGroupAddon>
       </InputGroup>
     </Field>
-  )
+  );
 }
 
 /** Outline-button date picker in a popover. */
@@ -254,14 +247,14 @@ function DateField({
   onChange,
   disabledBefore,
 }: {
-  id: string
-  label: string
-  value: Date | undefined
-  onChange: (value: Date | undefined) => void
+  id: string;
+  label: string;
+  value: Date | undefined;
+  onChange: (value: Date | undefined) => void;
   /** Dates before this are not selectable. */
-  disabledBefore?: Date
+  disabledBefore?: Date;
 }) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = React.useState(false);
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -274,7 +267,7 @@ function DateField({
               variant="outline"
               className={cn(
                 "w-full justify-between font-normal",
-                !value && "text-muted-foreground"
+                !value && "text-muted-foreground",
               )}
             />
           }
@@ -288,8 +281,8 @@ function DateField({
             selected={value}
             defaultMonth={value ?? disabledBefore}
             onSelect={(d) => {
-              onChange(d)
-              setOpen(false)
+              onChange(d);
+              setOpen(false);
             }}
             disabled={disabledBefore ? { before: disabledBefore } : undefined}
             autoFocus
@@ -297,17 +290,17 @@ function DateField({
         </PopoverContent>
       </Popover>
     </Field>
-  )
+  );
 }
 
 function CityChips({
   cities,
   onRemove,
 }: {
-  cities: City[]
-  onRemove: (city: City) => void
+  cities: City[];
+  onRemove: (city: City) => void;
 }) {
-  if (cities.length === 0) return null
+  if (cities.length === 0) return null;
   return (
     <ul className="flex flex-wrap gap-2">
       {cities.map((c) => (
@@ -327,7 +320,7 @@ function CityChips({
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 function MultiCityField({
@@ -338,15 +331,15 @@ function MultiCityField({
   cities,
   exclude,
 }: {
-  label: string
-  placeholder: string
-  selected: City[]
-  onChange: (cities: City[]) => void
-  cities: City[]
+  label: string;
+  placeholder: string;
+  selected: City[];
+  onChange: (cities: City[]) => void;
+  cities: City[];
   /** Cities that can't be picked here (already used elsewhere). */
-  exclude: City[]
+  exclude: City[];
 }) {
-  const taken = new Set([...selected, ...exclude].map((c) => c.id))
+  const taken = new Set([...selected, ...exclude].map((c) => c.id));
   return (
     <div className="flex flex-col gap-2">
       <CityPicker
@@ -361,7 +354,7 @@ function MultiCityField({
         onRemove={(c) => onChange(selected.filter((x) => x.id !== c.id))}
       />
     </div>
-  )
+  );
 }
 
 export function TripInputs({
@@ -375,40 +368,40 @@ export function TripInputs({
   loading = false,
   className,
 }: TripInputsProps) {
-  const id = React.useId()
-  const [dateOpen, setDateOpen] = React.useState(false)
-  const selectedDuration = optionForDays(value.duration)
+  const id = React.useId();
+  const [dateOpen, setDateOpen] = React.useState(false);
+  const selectedDuration = optionForDays(value.duration);
   const [durationQuery, setDurationQuery] = React.useState(
-    selectedDuration?.label ?? ""
-  )
-  const durationInput = React.useRef<HTMLInputElement>(null)
-  const [today, setToday] = React.useState<Date>()
+    selectedDuration?.label ?? "",
+  );
+  const durationInput = React.useRef<HTMLInputElement>(null);
+  const [today, setToday] = React.useState<Date>();
 
   const set = <K extends keyof TripInputsValue>(
     key: K,
-    v: TripInputsValue[K]
-  ) => onChange({ ...value, [key]: v })
+    v: TripInputsValue[K],
+  ) => onChange({ ...value, [key]: v });
 
   /** Trips longer than 7 days (ranges and custom counts) require signing up. */
-  const requiresSignUp = parseInt(value.duration) > 7
+  const requiresSignUp = parseInt(value.duration) > 7;
 
   return (
     <form
       aria-label="Trip details"
       onSubmit={(e) => {
-        e.preventDefault()
-        if (!isTripInputsComplete(value) || loading) return
-        if (requiresSignUp) onSignUp?.(value)
-        else onSubmit?.(value)
+        e.preventDefault();
+        if (!isTripInputsComplete(value) || loading) return;
+        if (requiresSignUp) onSignUp?.(value);
+        else onSubmit?.(value);
       }}
       className={cn("flex flex-col gap-4", className)}
     >
       <SearchBar className="divide-y-0 rounded-3xl lg:divide-x-0 lg:rounded-full">
         <SearchSegment
-                  label="Departure"
-                  htmlFor={`${id}-departure`}
-                  className="px-6 py-5 lg:pl-9"
-                >
+          label="Departure"
+          htmlFor={`${id}-departure`}
+          className="px-6 py-5 lg:pl-9"
+        >
           <CityPicker
             bare
             id={`${id}-departure`}
@@ -423,15 +416,15 @@ export function TripInputs({
         </SearchSegment>
 
         <SearchSegment
-                  label="When"
-                  htmlFor={`${id}-date`}
-                  className="px-6 py-5"
-                >
+          label="When"
+          htmlFor={`${id}-date`}
+          className="px-6 py-5"
+        >
           <Popover
             open={dateOpen}
             onOpenChange={(open) => {
-              if (open) setToday(new Date())
-              setDateOpen(open)
+              if (open) setToday(new Date());
+              setDateOpen(open);
             }}
           >
             <PopoverTrigger
@@ -442,7 +435,7 @@ export function TripInputs({
                   variant="ghost"
                   className={cn(
                     "h-8 justify-between px-0 text-base font-semibold hover:bg-transparent aria-expanded:bg-transparent",
-                    !value.date && "text-muted-foreground"
+                    !value.date && "text-muted-foreground",
                   )}
                 />
               }
@@ -455,8 +448,8 @@ export function TripInputs({
                 mode="single"
                 selected={value.date}
                 onSelect={(d) => {
-                  set("date", d)
-                  setDateOpen(false)
+                  set("date", d);
+                  setDateOpen(false);
                 }}
                 disabled={today ? { before: today } : undefined}
                 autoFocus
@@ -466,10 +459,10 @@ export function TripInputs({
         </SearchSegment>
 
         <SearchSegment
-                  label="Trip length"
-                  htmlFor={`${id}-duration`}
-                  className="px-6 py-5"
-                >
+          label="Trip length"
+          htmlFor={`${id}-duration`}
+          className="px-6 py-5"
+        >
           <Combobox
             items={durationItems(durationQuery, selectedDuration)}
             filter={null}
@@ -477,12 +470,12 @@ export function TripInputs({
             value={selectedDuration}
             onValueChange={(o) => {
               if (o?.value === CUSTOM_DURATION.value) {
-                set("duration", "")
-                setDurationQuery("")
-                requestAnimationFrame(() => durationInput.current?.focus())
-                return
+                set("duration", "");
+                setDurationQuery("");
+                requestAnimationFrame(() => durationInput.current?.focus());
+                return;
               }
-              set("duration", o?.value ?? "")
+              set("duration", o?.value ?? "");
             }}
             inputValue={durationQuery}
             onInputValueChange={(v) =>
@@ -497,14 +490,16 @@ export function TripInputs({
               className={SEARCH_CONTROL}
             />
             <ComboboxContent className="min-w-48">
-              <ComboboxEmpty>Enter a whole number of days (1–365)</ComboboxEmpty>
+              <ComboboxEmpty>
+                Enter a whole number of days (1–365)
+              </ComboboxEmpty>
               <ComboboxList>
                 {(item: DurationOption) => (
                   <ComboboxItem
                     key={item.value}
                     value={item}
                     className={cn(
-                      parseInt(item.value) > 7 && "text-muted-foreground"
+                      parseInt(item.value) > 7 && "text-muted-foreground",
                     )}
                   >
                     {item.label}
@@ -535,14 +530,12 @@ export function TripInputs({
                   ? "Sign up to continue"
                   : "Search"}
             </TooltipTrigger>
-            <TooltipContent>
-              Choose at least one way to travel.
-            </TooltipContent>
+            <TooltipContent>Choose at least one way to travel.</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </SearchBar>
 
-
+      {/*<p className="text-center text-sm text-muted-foreground">Departure ±1 day · 10 cheapest options · No repeat cities</p>*/}
       <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
         <div className="flex flex-wrap items-center justify-center gap-2">
           <span id={`${id}-modes`} className="sr-only">
@@ -559,10 +552,10 @@ export function TripInputs({
           >
             {MODE_OPTIONS.map(({ value: mode, label, Icon }) => (
               <ToggleGroupItem
-                              key={mode}
-                              value={mode}
-                              className="w-36 rounded-full bg-card hover:bg-muted aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground"
-                            >
+                key={mode}
+                value={mode}
+                className="w-36 rounded-full bg-card hover:bg-muted aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground"
+              >
                 <Icon />
                 {label}
               </ToggleGroupItem>
@@ -573,49 +566,6 @@ export function TripInputs({
             value={value.travelers}
             onChange={(n) => set("travelers", n)}
           /> */}
-          <Combobox
-            items={BUDGET_SUGGESTIONS}
-            filter={null}
-            value={
-              BUDGET_SUGGESTIONS.includes(value.budget) ? value.budget : null
-            }
-            onValueChange={(v) => set("budget", v ?? "")}
-            inputValue={value.budget}
-            onInputValueChange={(v) =>
-              set(
-                "budget",
-                v
-                  .replace(/\D/g, "")
-                  .replace(/^0+/, "")
-                  .slice(0, MAX_BUDGET_DIGITS)
-              )
-            }
-          >
-            <ComboboxInput
-              id={`${id}-budget`}
-              aria-label="Max budget"
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="Max budget"
-              className="h-8 w-36 rounded-full bg-card dark:bg-card [&_input]:text-sm [&_input]:font-medium"
-                            showTrigger={false}
-            >
-              <InputGroupAddon>
-                <InputGroupText className="font-medium text-foreground">
-                  €
-                </InputGroupText>
-              </InputGroupAddon>
-            </ComboboxInput>
-            <ComboboxContent className="min-w-32">
-              <ComboboxList>
-                {(item: string) => (
-                  <ComboboxItem key={item} value={item}>
-                    €{item}
-                  </ComboboxItem>
-                )}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger
@@ -624,14 +574,15 @@ export function TripInputs({
                     type="button"
                     size="icon"
                     className="rounded-full text-white"
-                    aria-label="About sample itineraries"
+                    aria-label="About trip estimates"
                   />
                 }
               >
                 <CircleHelp aria-hidden />
               </TooltipTrigger>
               <TooltipContent className="text-sm leading-relaxed">
-                Sample itineraries with estimated fares. Schedules are illustrative, not bookable. Routes without supported pricing are omitted.
+                Published transport schedules with forecast prices. Final fares
+                and availability require provider confirmation.
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -683,15 +634,6 @@ export function TripInputs({
           <Card>
             <CardContent className="flex flex-col gap-6">
               <div className="grid gap-4 md:grid-cols-3">
-                <NumberField
-                  id={`${id}-city-count`}
-                  label="Number of cities"
-                  unit="cities"
-                  placeholder="Any"
-                  maxDigits={2}
-                  value={value.numberOfCities}
-                  onChange={(v) => set("numberOfCities", v)}
-                />
                 <DateField
                   id={`${id}-return-date`}
                   label="Return date"
@@ -739,5 +681,5 @@ export function TripInputs({
       </Collapsible>
       */}
     </form>
-  )
+  );
 }

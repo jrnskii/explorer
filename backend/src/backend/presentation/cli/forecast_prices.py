@@ -7,11 +7,14 @@ import json
 from pathlib import Path
 import sys
 
+from backend.application.telemetry import traced
+from backend.infrastructure.logging import cli_entrypoint
 from backend.domain.pricing import ForecastQuery
 from backend.domain.travel import TransportType
 from backend.infrastructure.pricing.forecast import DEFAULT_ARTIFACT, load_forecaster
 
 
+@traced
 def forecast_batch(payload, forecaster, as_of=None):
     if not isinstance(payload, dict) or set(payload) != {"queries"}:
         raise ValueError("Expected an object containing queries only")
@@ -56,6 +59,7 @@ def forecast_batch(payload, forecaster, as_of=None):
     )
 
 
+@cli_entrypoint
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--models", type=Path, default=DEFAULT_ARTIFACT)

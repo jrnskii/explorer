@@ -1,37 +1,61 @@
 # Round Trip
 
-## Run with Docker Compose
+## Run staging
 
-With Docker Engine and the Compose plugin (or Docker Desktop) installed, run:
+Search ranks routes using the existing datasets and forecast models, then prices
+**only the single best opportunity** through Scrappa/Omio. The browser calls a
+Next.js server route, which authenticates to the GraphQL API using the server-only
+`APP_ACCESS_TOKEN`. The API follows `shared/graphql/schema_v1.graphql`.
+
+Prepare the dated schedule snapshot and configure `.env.staging` using
+[the staging guide](docs/staging.md), then run:
+
+```sh
+just staging
+```
+
+The staging stack uses production builds, non-root users, readiness checks and a
+persistent provider cache. It exposes the frontend on localhost; configure
+`FRONTEND_PORT` (the local setup uses 3100). No mock schedules or demo city list
+are used by the search API.
+
+## Local development with Compose
+
+After preparing `backend/data/staging/schedules.sqlite`, set `APP_ACCESS_TOKEN`
+and `SCRAPPA_API_KEY` in the root `.env`, then run:
 
 ```sh
 docker compose up
 ```
 
-Open <http://localhost:3000>. This runs the frontend development server with
-hot reload and locked Bun dependencies. Set `FRONTEND_PORT=3001` to use another
-host port. The UI currently displays synthetic sample results; the backend has
-CLI entry points rather than an HTTP API.
-
-Run the offline backend demo separately (JSON on stdout, logs on stderr):
+Open <http://localhost:3000>. Both frontend and authenticated backend start;
+the frontend uses hot reload and locked Bun dependencies. `STAGING_DATA_DIRECTORY`
+can point to another snapshot directory. Backend source and shared SDL are mounted;
+container dependencies and frontend output remain in named volumes. The cache is
+persisted under `backend/data/`. To invoke an existing CLI instead of the HTTP API:
 
 ```sh
-docker compose run --rm backend
-# Override the default demo command with another backend CLI:
 docker compose run --rm backend python -m backend.presentation.cli.round_trip --help
 ```
 
-The backend uses Python 3.14 and locked uv runtime dependencies. Its `tools`
-profile keeps it out of the default `up`; explicitly targeting it with `run`
-enables it automatically. No provider credentials are required for the demo.
-Initial startup requires network access to pull images and install dependencies;
-the frontend also fetches Google Fonts. Source directories are mounted for local
-development, with container dependencies and Next.js output in named volumes to
-keep them separate from host installations. Host `.env` credentials are not
-injected into either service.
+Initial setup pulls images and installs locked dependencies. Stop services with
+`docker compose down`. Use `compose.staging.yml` / `just staging` for staging servers.
 
-Stop services with `docker compose down`. Add `--volumes` to also remove the
-container dependency and build caches.
+## Local development without Compose
+
+Set `APP_ACCESS_TOKEN`, `SCRAPPA_API_KEY`, and `SCHEDULE_SNAPSHOT_PATH` in the root
+`.env` (see `.env.example`). Point the snapshot path at a prepared
+`backend/data/staging/schedules.sqlite`. Start the two servers in separate terminals:
+
+```sh
+just api
+bun run --cwd frontend dev
+```
+
+The frontend development server shares the root access token and defaults to the
+API at `http://127.0.0.1:8000/graphql`. You can override `BACKEND_GRAPHQL_URL` in
+root `.env`, `frontend/.env.local`, or the process environment. Restart the frontend
+after changing root `.env`. Production configuration remains explicit.
 
 ## GraphQL code generation
 

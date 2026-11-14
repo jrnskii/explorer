@@ -1,9 +1,11 @@
 """Project fare searches onto static graphs without collapsing offer occurrences."""
 
+from backend.application.telemetry import traced
 from backend.application.ports import FareGraphWriter
 from backend.domain.fares import FareSearch
 
 
+@traced
 def populate_fare_graph(search: FareSearch, writer: FareGraphWriter) -> None:
     """Keep empty-search airports and parallel flights, retaining bundled fares.
 

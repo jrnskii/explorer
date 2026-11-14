@@ -158,6 +158,10 @@ class RoundTripSearchInput(BaseModel):
         ...,
         description='Earliest permitted departure timestamp from departure_city.\nDespite the field name, this is a timestamp, not a calendar date.',
     )
+    departure_timezone: String | None = Field(
+        None,
+        description='IANA timezone for calendar-day flexibility. Defaults to the supplied timestamp offset.',
+    )
     desired_arrival_date: DateTime = Field(
         ...,
         description='Target return arrival timestamp at departure_city, strictly after departure_date.\nDespite the field name, this is a timestamp, not a calendar date.',
@@ -166,9 +170,9 @@ class RoundTripSearchInput(BaseModel):
         [],
         description='Distinct canonical city identifiers that must not occur as leg endpoints,\nincluding connections. Must not overlap mandatory_cities or departure_city.',
     )
-    expenses_tolerance: MoneyInput = Field(
-        ...,
-        description='Maximum total itinerary price, inclusive of taxes and mandatory fees.\nThis is an absolute budget, not a percentage or an amount above a baseline.',
+    expenses_tolerance: MoneyInput | None = Field(
+        None,
+        description='Target total itinerary price, inclusive of taxes and mandatory fees.\nOptional legacy advisory value. Web search has no budget constraint or budget badges.',
     )
     fuzzy_search: Boolean = Field(
         False,
@@ -182,9 +186,13 @@ class RoundTripSearchInput(BaseModel):
         None,
         description='Hard elapsed limit in seconds from departure_date, including initial waiting.\nPositive when supplied; intersected with the return window.',
     )
+    min_cities: Int = Field(
+        1,
+        description='Minimum number of distinct visited cities, excluding departure_city.\nLegacy solver preference; web search always requires two destinations and no revisits.\nPositive integer; internal ticket connections count as visits, revisits count once.',
+    )
     time_tolerance: Int = Field(
         ...,
-        description='Maximum absolute deviation, in minutes, of the final return arrival from\ndesired_arrival_date. Must be non-negative; zero requires an exact match.\nThis tolerance does not permit departure before departure_date.',
+        description='Maximum absolute deviation, in minutes, of the final return arrival from\ndesired_arrival_date. Must be non-negative; zero requires an exact match.\nWeb search shifts departure and return windows together by ±1 calendar day.',
     )
     transport_types: list[TransportType] = Field(
         ..., description='Non-empty list of distinct allowed transport modes.'

@@ -11,13 +11,19 @@ import shutil
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from pathlib import Path
 from zipfile import ZipFile
 
 import duckdb
 
+from backend.application.telemetry import traced
+from backend.infrastructure.logging import cli_entrypoint, configure_logging
+
 DEFAULT_DIRECTORY = Path(__file__).resolve().parent / "data" / "mobilitydatabase"
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(
+    __spec__.name if __name__ == "__main__" and __spec__ else __name__
+)
 DEFAULT_WORKERS = min(4, os.cpu_count() or 1)
 # Explicit projection: geometry, bike attributes, media and arbitrary files are excluded.
 COLUMNS = {
@@ -61,6 +67,7 @@ def initialize(db):
     )
 
 
+@traced
 def convert_archive(path, feed_id, db):
     """Load selected columns using vectorized CSV ingestion, then filter references."""
     with ZipFile(path) as archive, tempfile.TemporaryDirectory() as directory:
@@ -149,6 +156,7 @@ def convert_archive(path, feed_id, db):
         return rows
 
 
+@traced
 def prepare_archive(job, directory):
     """A worker owns its connection and files; it never writes shared checkpoints."""
     path, feed_id, fingerprint = job
@@ -166,6 +174,7 @@ def prepare_archive(job, directory):
         return job, shard, 0, error
 
 
+@traced
 def merge_archive(db, shard, feed_id, relative, fingerprint, rows):
     # ATTACH is outside the transaction; only the coordinator writes staging.
     quoted_path = str(shard).replace("'", "''")
@@ -188,6 +197,7 @@ def merge_archive(db, shard, feed_id, relative, fingerprint, rows):
         db.execute("DETACH prepared")
 
 
+@traced
 def combine(raw_directory: Path, output_path: Path, workers: int = DEFAULT_WORKERS):
     if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
         raise ValueError("workers must be a positive integer")
@@ -247,8 +257,8 @@ def combine(raw_directory: Path, output_path: Path, workers: int = DEFAULT_WORKE
                 ) as pool:
                     # Bound both submitted work and completed shards awaiting merge.
                     results = pool.map(
-                        lambda job: prepare_archive(job, directory),
-                        jobs,
+                        lambda item: item[1].run(prepare_archive, item[0], directory),
+                        ((job, copy_context()) for job in jobs),
                         buffersize=workers,
                     )
                     for (path, feed_id, fingerprint), shard, rows, error in results:
@@ -269,12 +279,10 @@ def combine(raw_directory: Path, output_path: Path, workers: int = DEFAULT_WORKE
                         except Exception as error:
                             failed += 1
                             LOGGER.error(
-                                "Archive failed: %s (%s): %s",
+                                "Archive failed: %s (%s)",
                                 relative,
                                 type(error).__name__,
-                                error,
                             )
-                            LOGGER.debug("Archive traceback", exc_info=True)
                         finally:
                             shard.unlink(missing_ok=True)
             if failed:
@@ -310,6 +318,7 @@ def combine(raw_directory: Path, output_path: Path, workers: int = DEFAULT_WORKE
         }
 
 
+@cli_entrypoint
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw-dir", type=Path, default=DEFAULT_DIRECTORY / "raw")
@@ -317,7 +326,9 @@ def main(argv=None):
         "--output", type=Path, default=DEFAULT_DIRECTORY / "schedules.duckdb"
     )
     parser.add_argument(
-        "--log-level", choices=("DEBUG", "INFO", "WARNING", "ERROR"), default="INFO"
+        "--log-level",
+        choices=("TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"),
+        default=None,
     )
     parser.add_argument(
         "--workers",
@@ -328,23 +339,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers must be positive")
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    previous_level = LOGGER.level
-    LOGGER.addHandler(handler)
-    LOGGER.setLevel(args.log_level)
+    configure_logging(level=args.log_level)
     try:
-        try:
-            result = combine(args.raw_dir, args.output, workers=args.workers)
-        except Exception as error:
-            LOGGER.error(
-                "Schedule conversion failed (%s): %s", type(error).__name__, error
-            )
-            return 1
-    finally:
-        LOGGER.removeHandler(handler)
-        handler.close()
-        LOGGER.setLevel(previous_level)
+        result = combine(args.raw_dir, args.output, workers=args.workers)
+    except Exception as error:
+        LOGGER.error("Schedule conversion failed (%s)", type(error).__name__)
+        return 1
     print(json.dumps(result))
     return 0
 

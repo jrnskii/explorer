@@ -12,10 +12,11 @@ schema {
 
 type Query {
     """
-    Find round-trip itineraries satisfying the supplied constraints.
-    By default results are ordered by total price, then movement time.
-    With fuzzy_search, weighted city-stay fit ranks first, then price and movement time.
-    Hard schedule, city, budget and return-window constraints always apply.
+    Web search ranks up to ten local candidates across trip dates shifted by ±1 day.
+    Routes visit at least two destinations without revisiting intermediate cities.
+    The best candidate (or runner-up on failure) is provider-checked. Verified
+    itineraries are returned here; unchecked estimates are in extensions.estimated_routes.
+    Legacy solver consumers also support fuzzy stay ranking and minimum-city preferences.
     """
     round_trip_options(input: RoundTripSearchInput!): [RoundTripOption!]!
 }
@@ -48,6 +49,11 @@ input CityAttractivenessInput {
 }
 
 input RoundTripSearchInput {
+    """Minimum number of distinct visited cities, excluding departure_city.
+    Legacy solver preference; web search always requires two destinations and no revisits.
+    Positive integer; internal ticket connections count as visits, revisits count once."""
+    min_cities: Int! = 1
+
     """Hard elapsed limit in seconds from departure_date, including initial waiting.
     Positive when supplied; intersected with the return window."""
     max_trip_duration: Int
@@ -62,15 +68,18 @@ input RoundTripSearchInput {
     """
     Maximum absolute deviation, in minutes, of the final return arrival from
     desired_arrival_date. Must be non-negative; zero requires an exact match.
-    This tolerance does not permit departure before departure_date.
+    Web search shifts departure and return windows together by ±1 calendar day.
     """
     time_tolerance: Int!
 
     """
-    Maximum total itinerary price, inclusive of taxes and mandatory fees.
-    This is an absolute budget, not a percentage or an amount above a baseline.
+    Target total itinerary price, inclusive of taxes and mandatory fees.
+    Optional legacy advisory value. Web search has no budget constraint or budget badges.
     """
-    expenses_tolerance: MoneyInput!
+    expenses_tolerance: MoneyInput
+
+    """IANA timezone for calendar-day flexibility. Defaults to the supplied timestamp offset."""
+    departure_timezone: String
 
     """
     Non-empty canonical city identifier; also the final destination.

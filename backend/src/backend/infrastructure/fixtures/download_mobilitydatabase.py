@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -13,8 +14,12 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
+from backend.application.telemetry import event, traced
+from backend.infrastructure.logging import cli_entrypoint
+
 API_URL = "https://api.mobilitydatabase.org/v1"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "data" / "mobilitydatabase"
+logger = logging.getLogger("backend.infrastructure.fixtures.download_mobilitydatabase")
 # Broad Europe scope: includes transcontinental states, Cyprus, the Caucasus,
 # Kosovo (XK), and European dependencies. Selection uses feed locations, not HQs.
 EUROPE_COUNTRY_CODES = frozenset(
@@ -32,6 +37,7 @@ class CatalogClient:
         self.refresh_token = refresh_token
         self.timeout = timeout
 
+    @traced
     def refresh(self) -> None:
         if not self.refresh_token:
             raise ValueError("A refresh token is required")
@@ -46,6 +52,7 @@ class CatalogClient:
             raise ValueError("Token response has no access_token")
         self.access_token = token
 
+    @traced
     def get(self, path: str, **parameters: object) -> object:
         if not self.access_token:
             self.refresh()
@@ -58,13 +65,17 @@ class CatalogClient:
                 with urlopen(request, timeout=self.timeout) as response:
                     return json.load(response)
             except HTTPError as error:
+                event(logger, "mobility.http_error", level=logging.WARNING,
+                      status=error.code, attempt=attempt + 1)
                 if error.code != 401 or attempt or not self.refresh_token:
                     raise
                 error.close()
+                event(logger, "mobility.refresh_after_unauthorized", level=logging.DEBUG)
                 self.refresh()
         raise RuntimeError("Authentication failed")
 
 
+@traced
 def european_feeds(client: CatalogClient, page_size: int) -> list[dict]:
     """Traverse the complete catalogue, deduplicating by feed ID, not provider."""
     feeds = {}
@@ -101,6 +112,8 @@ def european_feeds(client: CatalogClient, page_size: int) -> list[dict]:
         previous_ids.update(ids)
         # Continue until an empty page, even if the server caps our requested limit.
         offset += len(page)
+        event(logger, "mobility.catalog_page", offset=offset,
+              page_size=len(page), selected_feeds=len(feeds))
     return [feeds[key] for key in sorted(feeds)]
 
 
@@ -109,6 +122,7 @@ def file_hash(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+@traced
 def download_archive(
     url: str, destination: Path, expected_hash: str | None, timeout: float
 ) -> str:
@@ -131,6 +145,7 @@ def download_archive(
         and expected_hash
         and file_hash(destination) == expected_hash
     ):
+        event(logger, "mobility.archive_cached", level=logging.DEBUG)
         return "cached"
     temporary = destination.with_suffix(".zip.part")
     try:
@@ -157,6 +172,7 @@ def write_json(path: Path, value: object) -> None:
     temporary.replace(path)
 
 
+@traced
 def download_schedules(
     client: CatalogClient, output_dir: Path, page_size: int = 500
 ) -> dict:
@@ -208,14 +224,18 @@ def download_schedules(
         except Exception as error:
             # Upstream exception messages can contain credentials or signed URLs.
             record.update(status="failed", error=type(error).__name__)
+            event(logger, "mobility.download_failed", level=logging.WARNING,
+                  error_type=type(error).__name__)
             print(
                 f"Download failed for {feed_id} ({type(error).__name__}); rerun to retry.",
                 file=sys.stderr,
             )
         write_json(destination / "manifest.json", manifest)
+        event(logger, "mobility.feed_processed", status=record["status"])
     return manifest
 
 
+@cli_entrypoint
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)

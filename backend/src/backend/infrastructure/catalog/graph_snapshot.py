@@ -13,6 +13,7 @@ from pathlib import Path
 
 import networkx as nx
 
+from backend.application.telemetry import traced
 from backend.infrastructure.catalog.base_graph import DATA
 
 DEFAULT_GRAPH_PATH = DATA / "base_graph.pickle"
@@ -63,6 +64,7 @@ def _compressed(path: Path) -> bool:
     raise ValueError("Graph snapshot path must end with .pickle or .pickle.zst")
 
 
+@traced
 def save_base_graph(graph: nx.MultiDiGraph, path: Path = DEFAULT_GRAPH_PATH) -> Path:
     """Atomically save a graph without building an intermediate node-link tree.
 
@@ -101,6 +103,7 @@ def save_base_graph(graph: nx.MultiDiGraph, path: Path = DEFAULT_GRAPH_PATH) -> 
     return path
 
 
+@traced
 def load_base_graph(path: Path = DEFAULT_GRAPH_PATH) -> nx.MultiDiGraph:
     """Load our local binary cache directly into a structurally frozen graph.
 
@@ -134,6 +137,7 @@ def load_base_graph(path: Path = DEFAULT_GRAPH_PATH) -> nx.MultiDiGraph:
     return nx.freeze(graph)
 
 
+@traced
 def load_base_graph_json(path: Path) -> nx.MultiDiGraph:
     """Read the legacy node-link JSON once when migrating existing snapshots."""
     with Path(path).open(encoding="utf-8") as stream:

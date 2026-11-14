@@ -7,6 +7,11 @@ services:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
+      APP_ACCESS_TOKEN: ${APP_ACCESS_TOKEN:?Set APP_ACCESS_TOKEN}
+      BACKEND_GRAPHQL_URL: http://backend:8000/graphql
+    depends_on:
+      backend:
+        condition: service_healthy
     volumes:
       - ./frontend:/app/frontend
       - frontend_node_modules:/app/frontend/node_modules
@@ -18,10 +23,9 @@ services:
         bun install --frozen-lockfile
         exec bun --bun next dev --hostname 0.0.0.0 --port 3000
 
-  # The backend currently exposes offline CLI tools, not an HTTP API.
+  # Local API with source mounts; use compose.staging.yml for production images.
   backend:
     image: ghcr.io/astral-sh/uv:python3.14-bookworm
-    profiles: [tools]
     working_dir: /app
     init: true
     environment:
@@ -29,12 +33,27 @@ services:
       UV_LINK_MODE: copy
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      APP_ACCESS_TOKEN: ${APP_ACCESS_TOKEN:?Set APP_ACCESS_TOKEN}
+      SCRAPPA_API_KEY: ${SCRAPPA_API_KEY:?Set SCRAPPA_API_KEY}
+      SCRAPPA_CACHE_PATH: /cache/scrappa.duckdb
+      SCHEDULE_SNAPSHOT_PATH: /data/schedules.sqlite
     volumes:
       - ./backend:/app/backend
+      - ./shared:/app/shared:ro
+      - ${STAGING_DATA_DIRECTORY:-./backend/data/staging}:/data:ro
+      - ./backend/data:/cache
       - backend_venv:/opt/backend-venv
       - uv_cache:/root/.cache/uv
     entrypoint: [uv, run, --project, backend, --locked, --no-dev]
-    command: [python, -m, backend.presentation.cli.round_trip_demo]
+    command: [uvicorn, backend.presentation.api:app, --host, 0.0.0.0, --port, "8000", --workers, "1"]
+    healthcheck:
+      test: [CMD, /opt/backend-venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 5
+      start_period: 60s
 
 volumes:
   frontend_node_modules:

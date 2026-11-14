@@ -3,11 +3,13 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 
+from backend.application.telemetry import traced
 from backend.domain.cities import City
 from backend.domain.planning import RoundTrip
 from backend.infrastructure.graphql.models import RoundTripOption
 
 
+@traced
 def serialize_options(
     options: Iterable[RoundTrip], cities: Mapping[str, City]
 ) -> list[dict[str, object]]:

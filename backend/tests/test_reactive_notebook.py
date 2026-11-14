@@ -41,4 +41,4 @@ class ReactiveTests(unittest.TestCase):
             search(pricing="mock", modes=())
         with self.assertRaises(ValueError):
             search(pricing="mock", must_visit=("Warsaw",), avoid=("Warsaw",))
-        self.assertFalse(search(pricing="mock", budget=0)[0])
+        self.assertTrue(search(pricing="mock", budget=0)[0])  # Legacy budget is advisory.

@@ -68,9 +68,16 @@ class SearchSettings:
     max_trip_duration: int | None = None
     city_attractiveness: tuple[CityAttractiveness, ...] = ()
     fuzzy_search: bool = False
+    min_cities: int = 1
+    latest_departure_date: datetime | None = None
+    departure_timezone: str | None = None
 
     def __post_init__(self):
         identifier(self.departure_city)
+        if self.latest_departure_date is not None and instant(self.latest_departure_date) < instant(self.departure_date):
+            raise ValueError("latest departure must follow earliest departure")
+        if type(self.min_cities) is not int or not 1 <= self.min_cities <= 2**31 - 1:
+            raise ValueError("min_cities must be a positive GraphQL Int")
         if type(self.fuzzy_search) is not bool:
             raise ValueError("fuzzy_search must be a boolean")
         if self.max_trip_duration is not None and (

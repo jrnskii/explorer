@@ -8,6 +8,7 @@ from pathlib import Path
 
 import duckdb
 
+from backend.infrastructure.logging import cli_entrypoint
 from backend.infrastructure.scrappa.client import (
     DEFAULT_DATABASE,
     PATHS,
@@ -16,6 +17,7 @@ from backend.infrastructure.scrappa.client import (
 )
 
 
+@cli_entrypoint
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", type=Path, default=DEFAULT_DATABASE)

@@ -182,9 +182,9 @@ reported in `result.pricing.unpriced_offer_ids` and excluded. Forecasting runs o
 per eligible offer identity; no provider calls occur during traversal.
 
 With an exact pricer, candidate retention and final selection use lowest estimated
-price first, including in fuzzy searches. Only that one route is passed to
-`quote`; failures never fall through to another route. Approximate budget pruning
-is deferred until reconciliation so an overestimated route can still be checked.
+price first, including in fuzzy searches. The best route, followed by the second-best if verification fails, is passed to
+`quote`; at most two candidates are checked. Budget is advisory and does not
+prune candidates or remove verified or estimated results.
 Search-state/leg/result bounds still apply; this does not prove global optimality.
 
 `ScrappaRoundTripPricer` supports direct one-way flights, trains and buses. It
@@ -207,9 +207,9 @@ candidate total. This common uplift preserves estimated gaps and makes the check
 route cheapest, with checked results winning ties. `approximate_price`,
 `ranking_adjustment`, and `result.pricing.candidates` expose the original forecasts
 and adjustments. These adjustments are planning policy, not observed fees or new
-training labels. Budgets apply to returned totals; an over-budget checked route can
-leave no results, with status `over_budget`. On provider failure, the status is
-`unavailable` and affordable original estimates remain explicitly unverified.
+training labels. Over-budget results remain visible, with status `over_budget`
+for the checked route and a per-option `over_budget` metadata flag. On provider
+failure, the status is `unavailable` and original estimates remain explicitly unverified.
 
 The CLI runs forecast prices through this core integration. To enable Scrappa:
 

@@ -67,6 +67,86 @@ def payload():
 
 
 class SolverTests(unittest.TestCase):
+    def test_minimum_distinct_cities_excludes_home_and_allows_more(self):
+        offers = [offer("ab", "A", "B", 0, 1),
+                  offer("ba", "B", "A", 9, 10),
+                  offer("bc", "B", "C", 2, 3),
+                  offer("ca", "C", "A", 9, 10)]
+        self.assertEqual(len(find_round_trips(settings(), offers).options), 2)
+        result = find_round_trips(settings(min_cities=2), offers)
+        self.assertEqual(len(result.options), 1)
+        self.assertEqual([l.destination for l in result.options[0].path], ["B", "C", "A"])
+        self.assertEqual(find_round_trips(settings(min_cities=3), offers).options, ())
+
+    def test_minimum_cities_counts_internal_connections_once_across_revisits(self):
+        bundled = JourneyOffer("bundle", (leg("A", "B", 0, 1), leg("B", "C", 2, 3)),
+                                Money(Decimal("10"), "USD"), "test", True)
+        offers = [bundled, offer("cb", "C", "B", 4, 5), offer("ba", "B", "A", 9, 10)]
+        self.assertEqual(len(find_round_trips(settings(min_cities=2), offers, allow_city_revisits=True).options), 1)
+        self.assertEqual(find_round_trips(settings(min_cities=3), offers, allow_city_revisits=True).options, ())
+
+    def test_minimum_cities_requires_positive_graphql_integer(self):
+        for value in (0, -1, True, None, 1.5, "2", 2**31):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                settings(min_cities=value)
+
+
+    def test_lazy_index_matches_exhaustive_price_order(self):
+        supplied = [offer("ab", "A", "B", 0, 1, "1"), offer("ba", "B", "A", 9, 10, "1"),
+                    offer("ac", "A", "C", 0, 1, "2"), offer("ca", "C", "A", 9, 10, "2"),
+                    offer("bc", "B", "C", 2, 3, "0.1"), offer("cb", "C", "B", 2, 3, "0.1")]
+        class Index:
+            def __init__(self):
+                self.calls = []
+            def outgoing(self, city):
+                self.calls.append(city)
+                return tuple(o for o in supplied if o.path[0].origin == city)
+            def reverse_connections(self):
+                reverse = {}
+                for o in supplied:
+                    reverse.setdefault(o.path[-1].destination, set()).add(o.path[0].origin)
+                return reverse
+        for count in (1, 2, 20):
+            with self.subTest(count=count):
+                index = Index()
+                limits = SearchLimits(max_results=count)
+                expected = find_round_trips(settings(), supplied, limits)
+                actual = find_round_trips(settings(), (), limits, offer_index=index)
+                self.assertEqual(actual.options, expected.options)
+                self.assertEqual(len(index.calls), len(set(index.calls)))
+                self.assertFalse(actual.truncation_reasons)
+
+    def test_lazy_transition_budget_is_explicit(self):
+        class Index:
+            def outgoing(self, city):
+                return (offer("ab", "A", "B", 0, 1),) if city == "A" else (offer("ba", "B", "A", 9, 10),)
+            def reverse_connections(self):
+                return {"A": {"B"}, "B": {"A"}}
+        result = find_round_trips(settings(), (), offer_index=Index(), max_transitions=1)
+        self.assertIn("max_transitions", result.truncation_reasons)
+        self.assertEqual(result.options, ())
+
+    def test_completed_routes_survive_budget_exhaustion_in_dense_schedule(self):
+        class Index:
+            def outgoing(self, city):
+                if city == "A":
+                    return tuple(offer(f"out-{i}", "A", "B", 0, 1, "1") for i in range(100))
+                return (offer("back", "B", "A", 9, 10, "1"),)
+
+            def reverse_connections(self):
+                return {"A": {"B"}, "B": {"A"}}
+
+        for limits, budget, expected_reason in (
+            (SearchLimits(), 101, "max_transitions"),
+            (SearchLimits(max_states=2), None, "max_states"),
+        ):
+            with self.subTest(reason=expected_reason):
+                result = find_round_trips(settings(), (), limits, offer_index=Index(), max_transitions=budget)
+                self.assertIn(expected_reason, result.truncation_reasons)
+                self.assertEqual(len(result.options), 1)
+                self.assertEqual(result.options[0].total_price.amount, Decimal("2"))
+                self.assertEqual([leg.destination for leg in result.options[0].path], ["B", "A"])
+
     def test_revisits_skipped_by_default_but_final_return_home_allowed(self):
         offers = [
             offer("out", "A", "B", 0, 1),
@@ -138,7 +218,7 @@ class SolverTests(unittest.TestCase):
                     settings(expenses_tolerance=Money(Decimal("19.98"), "USD")), offers
                 ).options
             ),
-            0,
+            3,
         )
 
     def test_required_cities_excluded_internal_connections_bundle_price_once(self):
@@ -310,6 +390,7 @@ class SolverTests(unittest.TestCase):
 class BoundaryAndProviderTests(unittest.TestCase):
     def test_invalid_schema_constraints(self):
         mutations = [
+            *({"min_cities": value} for value in (0, -1, True, None, 1.5, "2", 2**31)),
             {"time_tolerance": -1},
             {"time_tolerance": True},
             {"transport_types": []},
@@ -407,7 +488,12 @@ class VilniusDemoTests(unittest.TestCase):
         repeated = subprocess.run(command, capture_output=True, text=True, timeout=30)
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(repeated.stdout, actual.stdout)
-        self.assertEqual(repeated.stderr, actual.stderr)
+        # Action messages are deterministic; timing and per-run correlation IDs vary.
+        def actions(stderr):
+            return [line.split('span_id=', 1)[1].split(' ', 1)[1].rsplit(' {', 1)[0]
+                    for line in stderr.splitlines()]
+
+        self.assertEqual(actions(repeated.stderr), actions(actual.stderr))
 
     def test_demo_can_explicitly_allow_city_revisits(self):
         actual = subprocess.run(

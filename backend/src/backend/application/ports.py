@@ -47,3 +47,15 @@ class RoundTripExactPricer(Protocol):
     """Resolve provider fares for exactly one chosen city/mode/date path."""
 
     def quote(self, option: RoundTrip, settings: SearchSettings) -> RoundTripQuote: ...
+
+
+class OfferLimitReached(RuntimeError):
+    """A lazy schedule index reached its explicit input-size bound."""
+
+
+class JourneyOfferIndex(Protocol):
+    """Request-scoped dated services, loaded only for cities explored by the solver."""
+
+    def outgoing(self, city: str) -> tuple[JourneyOffer, ...]: ...
+
+    def reverse_connections(self) -> dict[str, set[str]]: ...

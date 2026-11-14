@@ -2,11 +2,13 @@
 
 import networkx as nx
 
+from backend.application.telemetry import traced
 from backend.application.fare_graph import populate_fare_graph
 from backend.infrastructure.graphs.fare_graph import NetworkXFareGraphWriter
 from backend.infrastructure.ignav.fare_search import IgnavResponse, read_fare_search
 
 
+@traced
 def ignav_to_graph(response: IgnavResponse) -> nx.MultiDiGraph:
     """Convert search, one-way, or round-trip output into a detached multigraph.
 

@@ -129,3 +129,4 @@ class PriceReconciliation:
     unpriced_offer_ids: tuple[str, ...] = ()
     error: str | None = None
     fees_complete: bool = False
+    provider_pricing_attempts: int = 0

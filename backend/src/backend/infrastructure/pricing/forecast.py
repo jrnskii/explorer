@@ -5,8 +5,10 @@ from dataclasses import replace
 from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR, ROUND_CEILING
 from functools import lru_cache
 import json
+import logging
 from pathlib import Path
 
+from backend.application.telemetry import event, traced
 from backend.domain.planning import Money
 from backend.domain.pricing import ForecastQuery, PriceForecast
 from backend.domain.travel import TransportType
@@ -23,6 +25,8 @@ from backend.infrastructure.pricing.distance import (
 DEFAULT_ARTIFACT = (
     Path(__file__).resolve().parents[1] / "fixtures/data/pricing/forecast_models.json"
 )
+
+logger = logging.getLogger(__name__)
 
 
 def name(value):
@@ -214,6 +218,7 @@ MODELS = (FlightModel, RailModel, BusModel, FerryModel)
 
 
 class ForecastService:
+    @traced
     def __init__(self, artifact):
         if artifact.get("format") != "explorer.price_forecasts" or artifact.get(
             "version"
@@ -269,6 +274,7 @@ class ForecastService:
                 entries, self.information_date, data["model_id"], data.get("distance")
             )
 
+    @traced
     def predict(self, query):
         if not isinstance(query, ForecastQuery):
             raise ValueError("Expected a ForecastQuery")
@@ -303,11 +309,16 @@ class ForecastService:
             if distance is not None:
                 query = replace(query, distance_km=distance)
                 source = resolved_source
-        return self.models[query.mode].predict(query, source)
+        prediction = self.models[query.mode].predict(query, source)
+        event(logger, "forecast.predicted", mode=query.mode.value,
+              supported=prediction is not None, distance_source=source)
+        return prediction
 
 
 @lru_cache(maxsize=2)
+@traced
 def _load(path, modified, size):
+    event(logger, "forecast.artifact_read", level=logging.DEBUG, bytes=size)
     try:
         return ForecastService(json.loads(Path(path).read_text()))
     except (KeyError, TypeError, ArithmeticError, json.JSONDecodeError) as error:
@@ -316,6 +327,7 @@ def _load(path, modified, size):
         ) from error
 
 
+@traced
 def load_forecaster(path=DEFAULT_ARTIFACT):
     path = Path(path).expanduser().resolve()
     if not path.is_file():

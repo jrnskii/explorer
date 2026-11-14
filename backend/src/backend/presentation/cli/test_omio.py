@@ -12,12 +12,14 @@ from zoneinfo import ZoneInfo
 import duckdb
 from dotenv import load_dotenv
 
+from backend.infrastructure.logging import cli_entrypoint
 from backend.infrastructure.scrappa.client import DEFAULT_DATABASE, ScrappaClient, ScrappaError
 from backend.infrastructure.scrappa.route_probe import MAJOR_DESTINATIONS, fetch_routes
 
 ROOT = Path(__file__).resolve().parents[5]
 
 
+@cli_entrypoint
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--date", required=True, type=date.fromisoformat,

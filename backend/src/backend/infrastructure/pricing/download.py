@@ -13,6 +13,9 @@ import tempfile
 from urllib.request import Request, urlopen
 import zipfile
 
+from backend.application.telemetry import traced
+from backend.infrastructure.logging import cli_entrypoint
+
 SCHENGEN = tuple('AT BE BG HR CZ DK EE FI FR DE GR HU IS IT LV LI LT LU MT NL NO PL PT RO SK SI ES SE CH'.split())
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / 'fixtures' / 'data' / 'pricing'
 HF = 'https://huggingface.co/datasets/DeusHorizon/flight-fare-history'
@@ -54,6 +57,7 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
+@traced
 def fetch(url: str, path: Path, timeout: float, max_bytes: int, expected=None) -> dict:
     """Bounded streaming download; failure never replaces an existing artifact."""
     request = Request(url, headers={'User-Agent': 'explorer-pricing-datasets/1.0'})
@@ -87,6 +91,7 @@ def fetch(url: str, path: Path, timeout: float, max_bytes: int, expected=None) -
             temporary.unlink(missing_ok=True)
 
 
+@traced
 def acquire(name: str, directory: Path, timeout: float, max_bytes: int) -> list[dict]:
     def get(url, filename, expected=None):
         return fetch(url, directory / filename, timeout, max_bytes, expected)
@@ -135,6 +140,7 @@ def write_json(path: Path, data: dict):
     temporary.replace(path)
 
 
+@cli_entrypoint
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', nargs='+', choices=SOURCES, default=list(SOURCES))

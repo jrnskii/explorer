@@ -6,6 +6,8 @@ import json
 import math
 from statistics import median
 
+from backend.application.telemetry import traced
+
 MIN_ROUTES = 3
 BASIS = "city_centres_great_circle"
 
@@ -19,6 +21,7 @@ def scope(identity, ferry=False):
     return json.dumps([parts[0]] if ferry else parts[2:], separators=(",", ":"))
 
 
+@traced
 def graph_distances(graph):
     """Keep directed mode-specific edges; ambiguity is excluded, never guessed."""
     from backend.infrastructure.pricing.forecast import code, name, route
@@ -197,6 +200,7 @@ def predict_distance(model, distance):
     )
 
 
+@traced
 def fit_distance(entries, distances, ferry=False):
     """Each route is one unit, independent of months, seats or parallel edges."""
     groups = defaultdict(list)

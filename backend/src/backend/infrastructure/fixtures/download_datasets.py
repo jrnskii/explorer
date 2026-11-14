@@ -6,6 +6,9 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
+from backend.application.telemetry import traced
+from backend.infrastructure.logging import cli_entrypoint
+
 DATASETS = {
     "train-stations": "headsortails/train-stations-in-europe",
     "airlines": "rohitgrewal/airlines-flights-data",
@@ -14,6 +17,7 @@ DATASETS = {
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "data"
 
 
+@traced
 def download_dataset(name: str, output_dir: Path) -> Path:
     """Download one dataset into its own folder, extracting Kaggle archives.
 
@@ -46,6 +50,7 @@ def download_dataset(name: str, output_dir: Path) -> Path:
     return destination
 
 
+@traced
 def download_all_datasets(output_dir: Path = DEFAULT_OUTPUT_DIR) -> dict[str, Path]:
     """Download all three datasets, returning their local directories.
 
@@ -54,6 +59,7 @@ def download_all_datasets(output_dir: Path = DEFAULT_OUTPUT_DIR) -> dict[str, Pa
     return {name: download_dataset(name, output_dir) for name in DATASETS}
 
 
+@cli_entrypoint
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Download external fixture datasets.")
     parser.add_argument(

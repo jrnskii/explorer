@@ -3,11 +3,13 @@
 from dataclasses import replace
 from datetime import date
 
+from backend.application.telemetry import traced
 from backend.application.ports import PriceForecaster
 from backend.domain.planning import Money, instant
 from backend.domain.pricing import ForecastQuery
 
 
+@traced
 def reprice_offers(
     offers, forecaster: PriceForecaster, cities, *, as_of: date, travelers=1
 ):
@@ -60,6 +62,7 @@ class ForecastOfferProvider:
         )
         self.evidence, self.skipped = {}, ()
 
+    @traced
     def offers(self, settings):
         if settings.expenses_tolerance.currency != "EUR":
             raise ValueError(
@@ -95,6 +98,7 @@ class ForecastOfferEstimator:
         self.evidence = {}
         self.skipped = []
 
+    @traced
     def estimate_offer(self, offer):
         priced, evidence, skipped = reprice_offers(
             (offer,),

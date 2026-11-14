@@ -122,3 +122,9 @@ dmypy.json
 
 # Local Scrappa response and fare history (may contain provider data).
 /backend/data/
+
+# Frontend application libraries are source, not Python build output.
+!/frontend/lib/
+
+# Local staging credentials.
+.env.staging

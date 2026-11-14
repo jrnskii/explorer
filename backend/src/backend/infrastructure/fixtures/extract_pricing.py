@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, localcontext
 import io
 import json
+import logging
 import shutil
 from pathlib import Path
 import sys
@@ -17,6 +18,8 @@ import zipfile
 import duckdb
 import pandas as pd
 
+from backend.application.telemetry import event, traced
+from backend.infrastructure.logging import cli_entrypoint
 from backend.infrastructure.pricing.download import SCHENGEN, digest
 
 DEFAULT_DIRECTORY = Path(__file__).resolve().parent / "data"
@@ -308,6 +311,7 @@ class Sink:
         self.review.clear()
 
 
+@traced
 def extract_file(path, sink):
     name = path.name
     if name in ("fares-by-month.csv", "routes.csv"):
@@ -415,6 +419,7 @@ def add_source(
     )
 
 
+@traced
 def extract_gtfs(directory, db):
     catalogue = directory / "mobilitydatabase/catalog.json"
     raw = directory / "mobilitydatabase/raw"
@@ -503,6 +508,7 @@ def extract_gtfs(directory, db):
             )
 
 
+@traced
 def extract_summaries(pricing, db):
     path = pricing / "flights/research__europe-countries.csv"
     if not path.exists():
@@ -537,6 +543,7 @@ def extract_summaries(pricing, db):
     )
 
 
+@traced
 def extract(directory=DEFAULT_DIRECTORY, output=None):
     directory = Path(directory).expanduser().resolve()
     output = (
@@ -700,11 +707,15 @@ def extract(directory=DEFAULT_DIRECTORY, output=None):
                     )
                     db.execute("CHECKPOINT")
                 staging.replace(output)
+                event(logging.getLogger("backend.infrastructure.fixtures.extract_pricing"),
+                      "pricing.extracted", level=logging.INFO,
+                      **{key: value for key, value in result.items() if key != "output"})
         finally:
             lock.unlink(missing_ok=True)
     return result
 
 
+@cli_entrypoint
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures-dir", type=Path, default=DEFAULT_DIRECTORY)

@@ -5,12 +5,21 @@ searches find the cheapest supplied offers only when exploration is not truncate
 """
 
 from collections import defaultdict
+import heapq
+from itertools import count
 from dataclasses import dataclass, replace
 from decimal import Decimal, localcontext
 from typing import Iterable
 import logging
 
-from backend.application.ports import OfferPriceForecaster, RoundTripExactPricer
+from backend.application.telemetry import event, traced
+from backend.application.search_diagnostics import candidate_selected, candidate_failed, candidate_verified
+from backend.application.ports import (
+    JourneyOfferIndex,
+    OfferLimitReached,
+    OfferPriceForecaster,
+    RoundTripExactPricer,
+)
 from backend.domain.pricing import (
     ExactPricingUnavailable,
     CandidateEstimate,
@@ -53,12 +62,16 @@ class SearchResult:
     pricing: PriceReconciliation | None = None
 
 
+@traced
 def find_round_trips(
     settings: SearchSettings,
     offers: Iterable[JourneyOffer],
     limits: SearchLimits = SearchLimits(),
     *,
     allow_city_revisits: bool = False,
+    min_connection_seconds: int = 0,
+    offer_index: JourneyOfferIndex | None = None,
+    max_transitions: int | None = None,
     price_forecaster: OfferPriceForecaster | None = None,
     exact_pricer: RoundTripExactPricer | None = None,
 ) -> SearchResult:
@@ -68,10 +81,16 @@ def find_round_trips(
     explicitly to explore schedules that pass through a city more than once.
 
     Forecast whole purchases before traversal. With exact_pricer, retain candidates
-    by estimated price and verify only the cheapest retained route after traversal.
-    Provider failures never trigger another candidate check; ranking adjustments
+    by estimated price and verify the cheapest retained route after traversal.
+    If verification fails, try the second-ranked candidate once; ranking adjustments
     remain separate from genuine fares and original forecasts.
     """
+    if max_transitions is not None and (
+        type(max_transitions) is not int or max_transitions < 1
+    ):
+        raise ValueError("max_transitions must be a positive integer")
+    if type(min_connection_seconds) is not int or min_connection_seconds < 0:
+        raise ValueError("min_connection_seconds must be a non-negative integer")
     if type(allow_city_revisits) is not bool:
         raise ValueError("allow_city_revisits must be a boolean")
     logger.info(
@@ -93,66 +112,93 @@ def find_round_trips(
     excluded = set(settings.excluded_cities)
     home = settings.departure_city
     earliest, latest = settings.return_window
-    for offer in offers:
-        logger.debug(
-            "Inspect offer=%s route=%s price=%s %s",
-            offer.id,
-            " -> ".join(
-                (offer.path[0].origin, *(leg.destination for leg in offer.path))
-            ),
-            offer.price.amount,
-            offer.price.currency,
-        )
-        if offer.id in identities:
-            if identities[offer.id] != offer:
-                raise ValueError(f"conflicting offer identity: {offer.id}")
-            logger.debug("Skip duplicate offer=%s", offer.id)
-            continue
-        identities[offer.id] = offer
-        if any(
-            leg.transport_type not in settings.transport_types
-            or {leg.origin, leg.destination} & excluded
-            for leg in offer.path
-        ):
-            logger.debug("Reject offer=%s: excluded city or disallowed mode", offer.id)
-            continue
-        # Home inside a purchase would violate the first-return termination rule.
-        if any(leg.destination == home for leg in offer.path[:-1]):
-            logger.debug("Reject offer=%s: returns home inside ticket", offer.id)
-            continue
-        if (
-            instant(offer.path[0].departure_at) < instant(settings.departure_date)
-            or instant(offer.path[-1].arrival_at) > latest
-        ):
-            logger.debug("Reject offer=%s: outside departure/return horizon", offer.id)
-            continue
-        if price_forecaster is not None:
-            forecast = price_forecaster.estimate_offer(offer)
-            if forecast is None:
-                unpriced.append(offer.id)
-                continue
-            offer = replace(
-                offer, price=forecast.price, source="forecast:" + forecast.model_id
-            )
-        if offer.price.currency != settings.expenses_tolerance.currency:
-            raise ValueError(
-                "offer currency differs from budget; currency conversion is unsupported"
-            )
-        adjacency[offer.path[0].origin].append(offer)
-        logger.debug("Index offer=%s", offer.id)
-    for outgoing in adjacency.values():
-        outgoing.sort(
-            key=lambda offer: (
-                offer.price.amount,
-                instant(offer.path[0].departure_at),
+
+    def index_offers(supplied):
+        for offer in supplied:
+            logger.debug(
+                "Inspect offer=%s route=%s price=%s %s",
                 offer.id,
+                " -> ".join(
+                    (offer.path[0].origin, *(leg.destination for leg in offer.path))
+                ),
+                offer.price.amount,
+                offer.price.currency,
             )
-        )
-    # Directed reachability prunes dead ends without assumptions about prices/time.
-    reverse = defaultdict(set)
-    for city, outgoing in adjacency.items():
-        for offer in outgoing:
-            reverse[offer.path[-1].destination].add(city)
+            if offer.id in identities:
+                if identities[offer.id] != offer:
+                    raise ValueError(f"conflicting offer identity: {offer.id}")
+                logger.debug("Skip duplicate offer=%s", offer.id)
+                continue
+            identities[offer.id] = offer
+            if any(
+                leg.transport_type not in settings.transport_types
+                or {leg.origin, leg.destination} & excluded
+                for leg in offer.path
+            ):
+                logger.debug(
+                    "Reject offer=%s: excluded city or disallowed mode", offer.id
+                )
+                continue
+            # Home inside a purchase would violate the first-return termination rule.
+            if any(leg.destination == home for leg in offer.path[:-1]):
+                logger.debug("Reject offer=%s: returns home inside ticket", offer.id)
+                continue
+            if (
+                instant(offer.path[0].departure_at) < instant(settings.departure_date)
+                or (offer.path[0].origin == home and settings.latest_departure_date is not None
+                    and instant(offer.path[0].departure_at) > instant(settings.latest_departure_date))
+                or instant(offer.path[-1].arrival_at) > latest
+            ):
+                logger.debug(
+                    "Reject offer=%s: outside departure/return horizon", offer.id
+                )
+                continue
+            if price_forecaster is not None:
+                forecast = price_forecaster.estimate_offer(offer)
+                if forecast is None:
+                    unpriced.append(offer.id)
+                    continue
+                offer = replace(
+                    offer, price=forecast.price, source="forecast:" + forecast.model_id
+                )
+            if offer.price.currency != settings.expenses_tolerance.currency:
+                raise ValueError(
+                    "offer currency differs from budget; currency conversion is unsupported"
+                )
+            adjacency[offer.path[0].origin].append(offer)
+            logger.debug("Index offer=%s", offer.id)
+
+    loaded_cities = set()
+
+    def outgoing_for(city):
+        if offer_index is not None and city not in loaded_cities:
+            index_offers(offer_index.outgoing(city))
+            loaded_cities.add(city)
+            adjacency[city].sort(
+                key=lambda offer: (
+                    offer.price.amount,
+                    instant(offer.path[0].departure_at),
+                    offer.id,
+                )
+            )
+        return adjacency[city]
+
+    if offer_index is None:
+        index_offers(offers)
+        for outgoing in adjacency.values():
+            outgoing.sort(
+                key=lambda offer: (
+                    offer.price.amount,
+                    instant(offer.path[0].departure_at),
+                    offer.id,
+                )
+            )
+        reverse = defaultdict(set)
+        for city, outgoing in adjacency.items():
+            for offer in outgoing:
+                reverse[offer.path[-1].destination].add(city)
+    else:
+        reverse = defaultdict(set, offer_index.reverse_connections())
     reachable, pending = {home}, [home]
     while pending:
         for city in reverse[pending.pop()]:
@@ -160,30 +206,21 @@ def find_round_trips(
                 reachable.add(city)
                 pending.append(city)
     logger.debug("Cities with a directed route home: %s", sorted(reachable))
-    stack = [(home, instant(settings.departure_date), (), Decimal(0), frozenset(), 0)]
+    best_first = offer_index is not None and not settings.fuzzy_search
+    sequence = count()
+    stack = []
+
     candidates = []
-    reasons = set()
-    states = 0
     results_limited = False
-    while stack:
-        if states >= limits.max_states:
-            logger.info("Stop exploration: max_states=%s", limits.max_states)
-            reasons.add("max_states")
-            break
-        city, ready, chosen, total, visited, legs = stack.pop()
-        states += 1
-        logger.debug(
-            "Explore state=%s city=%s ready=%s total=%s legs=%s tickets=%s",
-            states,
-            city,
-            ready.isoformat(),
-            total,
-            legs,
-            tuple(offer.id for offer in chosen),
-        )
+
+    def push(state):
+        nonlocal results_limited
+        city, ready, chosen, total, visited, _legs = state
+        # Completed routes need no more exploration. Retain them before a work
+        # limit can stop traversal with cheaper unfinished routes still queued.
         if chosen and city == home:
             if (
-                visited - {home}
+                len(visited - {home}) >= settings.min_cities
                 and set(settings.mandatory_cities) <= visited
                 and earliest <= ready <= latest
             ):
@@ -224,8 +261,62 @@ def find_round_trips(
                 logger.debug(
                     "Reject return: required visits or return window not satisfied"
                 )
-            continue
-        for offer in reversed(adjacency[city]):
+            return
+        if best_first:
+            heapq.heappush(
+                stack,
+                (
+                    state[3],
+                    sum(leg.time_in_travel for offer in state[2] for leg in offer.path),
+                    next(sequence),
+                    state,
+                ),
+            )
+        else:
+            stack.append(state)
+
+    push((home, instant(settings.departure_date), (), Decimal(0), frozenset(), 0))
+    reasons = set()
+    states = 0
+    transitions = 0
+    while stack:
+        if max_transitions is not None and transitions >= max_transitions:
+            reasons.add("max_transitions")
+            break
+        if best_first and len(candidates) >= limits.max_results:
+            worst = candidates[-1]
+            bound = (
+                worst.total_price.amount,
+                sum(leg.time_in_travel for leg in worst.path),
+            )
+            if stack[0][:2] > bound:
+                results_limited = True
+                break  # All remaining partial paths have a worse lower bound.
+        if states >= limits.max_states:
+            logger.info("Stop exploration: max_states=%s", limits.max_states)
+            reasons.add("max_states")
+            break
+        state = heapq.heappop(stack)[3] if best_first else stack.pop()
+        city, ready, chosen, total, visited, legs = state
+        states += 1
+        logger.debug(
+            "Explore state=%s city=%s ready=%s total=%s legs=%s tickets=%s",
+            states,
+            city,
+            ready.isoformat(),
+            total,
+            legs,
+            tuple(offer.id for offer in chosen),
+        )
+        try:
+            outgoing = outgoing_for(city)
+        except OfferLimitReached:
+            reasons.add("max_offers")
+            break
+        for offer in reversed(outgoing):
+            if max_transitions is not None and transitions >= max_transitions:
+                break
+            transitions += 1
             logger.debug("Consider next ticket=%s from=%s", offer.id, city)
             destination = offer.path[-1].destination
             # Track physical arrivals, including connections within one purchase.
@@ -241,21 +332,15 @@ def find_round_trips(
             if repeated_city and not allow_city_revisits:
                 logger.debug("Skip ticket=%s: city already visited", offer.id)
                 continue
-            if (
-                destination not in reachable
-                or instant(offer.path[0].departure_at) < ready
-            ):
+            if destination not in reachable or (
+                instant(offer.path[0].departure_at) - ready
+            ).total_seconds() < (min_connection_seconds if chosen else 0):
                 logger.debug(
                     "Skip ticket=%s: missed departure or no directed route home",
                     offer.id,
                 )
                 continue
             amount = _add_exact(total, offer.price.amount)
-            if not staged and amount > settings.expenses_tolerance.amount:
-                logger.debug(
-                    "Skip ticket=%s: price=%s exceeds budget", offer.id, amount
-                )
-                continue  # These are fixed purchase prices, not historical estimates.
             if legs + len(offer.path) > limits.max_legs:
                 logger.debug("Skip ticket=%s: max_legs=%s", offer.id, limits.max_legs)
                 reasons.add("max_legs")
@@ -267,7 +352,7 @@ def find_round_trips(
                 offer.path[-1].arrival_at.isoformat(),
                 amount,
             )
-            stack.append(
+            push(
                 (
                     destination,
                     instant(offer.path[-1].arrival_at),
@@ -288,7 +373,9 @@ def find_round_trips(
         tuple(candidates), states, tuple(sorted(reasons)), results_limited
     )
     if exact_pricer is not None:
-        return _reconcile_one(result, settings, exact_pricer, tuple(unpriced))
+        return _reconcile_ranked(
+            result, settings, exact_pricer, tuple(unpriced), min_connection_seconds
+        )
     if price_forecaster is not None:
         return replace(
             result,
@@ -299,14 +386,20 @@ def find_round_trips(
     return result
 
 
-def _reconcile_one(result, settings, pricer, unpriced):
+@traced
+def _reconcile_ranked(result, settings, pricer, unpriced, min_connection_seconds=0):
+    event(logger, "pricing.reconciliation", candidates=len(result.options),
+          unpriced_count=len(unpriced))
     if not result.options:
         return replace(
             result,
             pricing=PriceReconciliation("no_candidates", unpriced_offer_ids=unpriced),
         )
-    chosen = min(result.options, key=lambda o: (o.total_price.amount, *_rank(o)))
-    checked = tuple(o.id for o in chosen.offers)
+    ranked = sorted(result.options, key=lambda o: (o.total_price.amount, *_rank(o)))
+    checked = ()
+    attempts = 0
+    failure = None
+    failed = []
     zero = Money(Decimal(0), settings.expenses_tolerance.currency)
 
     def record(original, returned, status, adjustment=zero):
@@ -318,17 +411,23 @@ def _reconcile_one(result, settings, pricer, unpriced):
             status,
         )
 
-    try:
-        quote = pricer.quote(
-            chosen, settings
-        )  # Exactly one route-level invocation; no retry.
-        verified = _verified_option(chosen, quote, settings)
-    except ExactPricingUnavailable as error:
-        estimated = tuple(
-            o
-            for o in result.options
-            if o.total_price.amount <= settings.expenses_tolerance.amount
-        )
+    for chosen in ranked[:2]:
+        attempts += 1
+        candidate_selected(chosen, settings, attempts, "schedule")
+        checked += tuple(o.id for o in chosen.offers)
+        try:
+            quote = pricer.quote(chosen, settings)
+            verified = verify_selected_route(chosen, quote, settings, min_connection_seconds)
+            candidate_verified(chosen, verified, settings, attempts)
+            break
+        except ExactPricingUnavailable as error:
+            candidate_failed(attempts, error)
+            failure = error
+            failed.append(chosen)
+            event(logger, "pricing.verification_unavailable", level=logging.WARNING,
+                  error_type=type(error).__name__)
+    else:
+        estimated = result.options
         return replace(
             result,
             options=estimated,
@@ -337,10 +436,11 @@ def _reconcile_one(result, settings, pricer, unpriced):
                 tuple(record(o, o.total_price, "estimated") for o in result.options),
                 checked,
                 unpriced_offer_ids=unpriced,
-                error=str(error),
+                error=str(failure),
+                provider_pricing_attempts=attempts,
             ),
         )
-    others = [o for o in result.options if o is not chosen]
+    others = [o for o in result.options if o is not chosen and o not in failed]
     # A single observed underestimation calibrates remaining totals. The raw
     # forecast, ticket prices and source graph are preserved, never training labels.
     uplift = zero
@@ -383,16 +483,14 @@ def _reconcile_one(result, settings, pricer, unpriced):
         if verified.total_price.amount <= settings.expenses_tolerance.amount
         else "over_budget"
     )
+    event(logger, "pricing.reconciled", level=logging.INFO, status=status,
+          candidate_count=len(options), fees_complete=quote.fees_complete)
     response_ids = tuple(
         dict.fromkeys(r for purchase in quote.purchases for r in purchase.response_ids)
     )
     return replace(
         result,
-        options=tuple(
-            o
-            for o in options
-            if o.total_price.amount <= settings.expenses_tolerance.amount
-        ),
+        options=tuple(options),
         pricing=PriceReconciliation(
             status,
             tuple(rows),
@@ -401,11 +499,12 @@ def _reconcile_one(result, settings, pricer, unpriced):
             uplift,
             unpriced,
             fees_complete=quote.fees_complete,
+            provider_pricing_attempts=attempts,
         ),
     )
 
 
-def _verified_option(original, quote, settings):
+def verify_selected_route(original, quote, settings, min_connection_seconds=0):
     if (
         not isinstance(quote, RoundTripQuote)
         or quote.price_scope != "provider_advertised"
@@ -436,9 +535,13 @@ def _verified_option(original, quote, settings):
         offers.append(replace(current, id=previous.id))
     # Quote matching preserves city/mode sequence. Recheck actual times in order,
     # not by exploring a second set of alternatives or invoking the provider again.
+    if settings.latest_departure_date is not None and instant(offers[0].path[0].departure_at) > instant(settings.latest_departure_date):
+        raise ExactPricingUnavailable("Provider timetable violates the departure window")
     ready = instant(settings.departure_date)
-    for offer in offers:
-        if instant(offer.path[0].departure_at) < ready:
+    for index, offer in enumerate(offers):
+        if (instant(offer.path[0].departure_at) - ready).total_seconds() < (
+            min_connection_seconds if index else 0
+        ):
             raise ExactPricingUnavailable("Provider timetable breaks a connection")
         ready = instant(offer.path[-1].arrival_at)
     earliest, latest = settings.return_window

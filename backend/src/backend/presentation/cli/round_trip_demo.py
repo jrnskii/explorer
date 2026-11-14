@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import json
 import logging
+import os
 
+from backend.infrastructure.logging import cli_entrypoint, configure_logging
 from backend.application.round_trip_search import SearchLimits, find_round_trips
 from backend.domain.planning import Money, SearchSettings
 from backend.domain.travel import TransportType as Mode
@@ -13,9 +15,12 @@ from backend.infrastructure.fixtures.vilnius_demo import demo_offers
 from backend.infrastructure.fixtures.cities import CITY_LOCATIONS
 from backend.infrastructure.graphql.round_trip import serialize_options
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(
+    __spec__.name if __name__ == "__main__" and __spec__ else __name__
+)
 
 
+@cli_entrypoint
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=42)
@@ -25,9 +30,7 @@ def main() -> None:
         help="Allow routes through previously visited cities (disabled by default).",
     )
     args = parser.parse_args()
-    logging.basicConfig(
-        level=logging.DEBUG, format="%(levelname)s %(name)s: %(message)s"
-    )
+    configure_logging(level=os.getenv("LOG_LEVEL", "DEBUG"))
     try:
         logger.info(
             "Loading deterministic demo settings; all services and prices are synthetic"

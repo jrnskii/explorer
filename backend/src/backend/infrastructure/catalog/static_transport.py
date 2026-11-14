@@ -12,6 +12,8 @@ from pathlib import Path
 import duckdb
 import networkx as nx
 
+from backend.application.telemetry import traced
+
 LOGGER = logging.getLogger(__name__)
 EU_CODES = dict(
     zip(
@@ -125,6 +127,7 @@ class CityIndex:
         return candidates[0][1]
 
 
+@traced
 def add_stations(
     graph: "nx.MultiDiGraph",
     path: Path,
@@ -233,6 +236,7 @@ GTFS_SECONDS_MACRO = """CREATE OR REPLACE TEMP MACRO gtfs_seconds(value) AS (
 )"""
 
 
+@traced
 def add_schedules(
     graph: "nx.MultiDiGraph",
     path: Path,

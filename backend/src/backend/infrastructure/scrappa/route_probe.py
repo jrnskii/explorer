@@ -3,6 +3,7 @@
 import unicodedata
 import sys
 
+from backend.application.telemetry import traced
 from backend.infrastructure.fixtures.eu_network import EU_CITIES
 from backend.infrastructure.scrappa.client import ScrappaClient, ScrappaError, matches_one_way_search
 
@@ -37,6 +38,7 @@ def _request(client: ScrappaClient, endpoint: str, params: dict, refresh: bool):
     return client.request(endpoint, params, refresh=True)
 
 
+@traced
 def _place(client: ScrappaClient, city: str, country: str, refresh: bool) -> int:
     data = _request(client, "places", {"query": city, "locale": "en"}, refresh).payload["data"]
     places = data.get("results")
@@ -56,6 +58,7 @@ def _place(client: ScrappaClient, city: str, country: str, refresh: bool) -> int
     return matches.pop()
 
 
+@traced
 def fetch_routes(
     client: ScrappaClient, day: str, destinations=MAJOR_DESTINATIONS, *, refresh=False,
 ) -> dict:
