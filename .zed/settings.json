@@ -11,5 +11,8 @@
     "tripadvisor-content": {
       "url": "https://docs.terra.tripadvisor.com/mcp",
     },
+    "scrappa": {
+      "url": "https://scrappa.co/mcp",
+    },
   },
 }
