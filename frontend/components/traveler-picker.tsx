@@ -41,18 +41,13 @@ export function TravelerPicker({
           <Button
             id={id}
             type="button"
-            variant="ghost"
-            className={cn(
-              "h-8 w-full justify-between px-0 text-base font-semibold hover:bg-transparent aria-expanded:bg-transparent",
-              className
-            )}
+            variant="outline"
+            className={cn("rounded-full bg-card px-3 font-medium dark:bg-card", className)}
           />
         }
       >
-        <span className="flex items-center gap-2">
-          <Users />
-          {label(value)}
-        </span>
+        <Users />
+        {label(value)}
         <ChevronDown />
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={12} className="w-72 gap-3">

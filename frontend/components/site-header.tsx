@@ -1,13 +1,36 @@
 import Image from "next/image"
 import Link from "next/link"
+import {
+  BadgeDollarSign,
+  CircleHelp,
+  House,
+  LogIn,
+  type LucideIcon,
+} from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { MyTripsLink } from "@/components/my-trips-link"
+import { buttonVariants } from "@/components/ui/button"
+import { RegionPreferences } from "@/components/region-preferences"
+
 import { cn } from "@/lib/utils"
 
-/** Placeholder entries: the routes don't exist yet. */
-const COMING_SOON = ["About us", "Community"]
+const NAV_LINKS: { label: string; href: string; icon: LucideIcon }[] = [
+  { label: "Pricing", href: "/pricing", icon: BadgeDollarSign },
+  { label: "Help", href: "/help", icon: CircleHelp },
+  { label: "Log in", href: "/login", icon: LogIn },
+]
 
-export function SiteHeader({ className }: { className?: string }) {
+const navButtonClass =
+  "text-foreground hover:bg-hover hover:text-forest"
+
+export function SiteHeader({
+  className,
+  current = "home",
+}: {
+  className?: string
+  /** Which page the header is rendered on; marks Home as current only on the homepage. */
+  current?: "home" | "help" | "pricing" | "login" | "my-trips"
+}) {
   return (
     <header
       className={cn(
@@ -25,22 +48,34 @@ export function SiteHeader({ className }: { className?: string }) {
           className="h-9 w-auto"
         />
       </Link>
-      <nav aria-label="Main" className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="secondary"
-          nativeButton={false}
-          render={<Link href="/" aria-current="page" />}
+      <nav aria-label="Main" className="flex flex-wrap items-center gap-1">
+        <Link
+          href="/"
+          aria-current={current === "home" ? "page" : undefined}
+          className={cn(buttonVariants({ variant: "ghost" }), navButtonClass)}
         >
-          Explore
-        </Button>
-        {COMING_SOON.map((label) => (
-          <Button key={label} variant="ghost" disabled title="Work in progress">
+          <House aria-hidden strokeWidth={1.5} />
+          Home
+        </Link>
+        <RegionPreferences autoDetect />
+
+        {NAV_LINKS.map(({ label, href, icon: Icon }) => (
+          <Link
+            key={label}
+            href={href}
+            aria-current={
+              current === href.slice(1) ? "page" : undefined
+            }
+            className={cn(buttonVariants({ variant: "ghost" }), navButtonClass)}
+          >
+            <Icon aria-hidden strokeWidth={1.5} />
             {label}
-          </Button>
+          </Link>
         ))}
-        <Button variant="outline" disabled title="Work in progress">
-          My trips
-        </Button>
+        <MyTripsLink
+          current={current === "my-trips"}
+          className={navButtonClass}
+        />
       </nav>
     </header>
   )

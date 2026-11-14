@@ -19,6 +19,9 @@ export type City = {
   country: string
   /** Optional short code, e.g. "LON" */
   code?: string
+  /** Optional WGS84 coordinates, used to place the city on the map. */
+  lat?: number
+  lon?: number
 }
 
 type CityPickerProps = {
@@ -134,7 +137,8 @@ export function CityPicker({
       }}
       open={open}
       onOpenChange={setOpen}
-      itemToStringValue={format}
+      itemToStringLabel={format}
+      itemToStringValue={(c) => c.id}
       isItemEqualToValue={(a, b) => a.id === b.id}
     >
       <ComboboxInput
