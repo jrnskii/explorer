@@ -150,3 +150,24 @@ describe("highlightTimeline", () => {
     assert.equal(highlightTimeline([[0, 0]]).fadeStartMs, HIGHLIGHT_ZOOM_MS)
   })
 })
+
+describe("highlightTimeline with a fixed total", () => {
+  const stops: [number, number][] = [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5]]
+
+  test("fits the whole showcase into the requested duration", () => {
+    const t = highlightTimeline(stops, 5000)
+    assert.ok(Math.abs(t.endMs - 5000) < 1e-6)
+    assert.ok(Math.abs(t.zoomMs + 5 * t.legMs - t.fadeStartMs) < 1e-6)
+  })
+
+  test("keeps the default timing without a fixed total", () => {
+    const t = highlightTimeline(stops)
+    assert.equal(t.zoomMs, HIGHLIGHT_ZOOM_MS)
+    assert.equal(t.endMs, HIGHLIGHT_ZOOM_MS + 5 * HIGHLIGHT_LEG_MS + HIGHLIGHT_FADE_MS)
+  })
+
+  test("ignores an invalid total", () => {
+    assert.equal(highlightTimeline(stops, 0).endMs, highlightTimeline(stops).endMs)
+    assert.equal(highlightTimeline(stops, Number.NaN).endMs, highlightTimeline(stops).endMs)
+  })
+})

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import type { City } from "@/components/city-picker"
 import { SiteHeader } from "@/components/site-header"
@@ -73,6 +73,10 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [options, setOptions] = useState<RoundTripOption[]>([])
   const [error, setError] = useState("")
+  const [flying, setFlying] = useState(false)
+  // Each search gets a number; its results show once the route showcase ends.
+  const [searchNumber, setSearchNumber] = useState(0)
+  const [revealedSearch, setRevealedSearch] = useState(0)
   const pending = useRef<AbortController | null>(null)
 
   useEffect(() => () => pending.current?.abort(), [])
@@ -82,6 +86,7 @@ export default function Home() {
     const controller = new AbortController()
     pending.current = controller
     setSearchedTravelers(value.travelers)
+    setSearchNumber((n) => n + 1)
     setStatus("loading")
     setError("")
     setOptions([])
@@ -131,7 +136,6 @@ export default function Home() {
 
 
   // Glowing path of the cheapest option, once its stops are placed on the map.
-  const options = SAMPLE_OPTIONS
   const cheapestStops = useMemo(() => {
     const cheapest = cheapestOption(options)
     return cheapest ? stopNames(cheapest) : []
